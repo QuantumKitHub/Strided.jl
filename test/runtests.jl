@@ -4,6 +4,7 @@ using Random
 using Strided
 using Strided: StridedView
 using CUDA
+using CUDA: Adapt
 
 Random.seed!(1234)
 
@@ -29,7 +30,7 @@ if !is_buildkite
 
 
     using Aqua
-    Aqua.test_all(Strided; piracies=false)
+    Aqua.test_all(Strided; piracies = false)
 end
 
 if CUDA.functional()
