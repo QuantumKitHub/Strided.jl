@@ -5,6 +5,7 @@ using Strided
 using Strided: StridedView
 using CUDA
 using Aqua
+using CUDA: Adapt
 
 Random.seed!(1234)
 
