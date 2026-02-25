@@ -2,7 +2,7 @@ module Strided
 
 import Base: parent, size, strides, tail, setindex
 using Base: @propagate_inbounds, RangeIndex, Dims
-const SliceIndex = Union{RangeIndex,Colon}
+const SliceIndex = Union{RangeIndex, Colon}
 
 using LinearAlgebra
 
@@ -27,7 +27,7 @@ function set_num_threads(n::Int)
     return _NTHREADS[] = n
 end
 @noinline function _set_num_threads_warn(n)
-    @warn "Maximal number of threads limited by number of Julia threads,
+    return @warn "Maximal number of threads limited by number of Julia threads,
             setting number of threads equal to Threads.nthreads() = $n"
 end
 

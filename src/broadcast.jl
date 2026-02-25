@@ -3,29 +3,33 @@ using Base.Broadcast: BroadcastStyle, AbstractArrayStyle, DefaultArrayStyle, Bro
 struct StridedArrayStyle{N} <: AbstractArrayStyle{N}
 end
 
-Broadcast.BroadcastStyle(::Type{<:StridedView{<:Any,N}}) where {N} = StridedArrayStyle{N}()
+Broadcast.BroadcastStyle(::Type{<:StridedView{<:Any, N}}) where {N} = StridedArrayStyle{N}()
 
 StridedArrayStyle(::Val{N}) where {N} = StridedArrayStyle{N}()
-StridedArrayStyle{M}(::Val{N}) where {M,N} = StridedArrayStyle{N}()
+StridedArrayStyle{M}(::Val{N}) where {M, N} = StridedArrayStyle{N}()
 
 Broadcast.BroadcastStyle(a::StridedArrayStyle, ::DefaultArrayStyle{0}) = a
 function Broadcast.BroadcastStyle(::StridedArrayStyle{N}, a::DefaultArrayStyle) where {N}
     return BroadcastStyle(DefaultArrayStyle{N}(), a)
 end
-function Broadcast.BroadcastStyle(::StridedArrayStyle{N},
-                                  ::Broadcast.Style{Tuple}) where {N}
+function Broadcast.BroadcastStyle(
+        ::StridedArrayStyle{N},
+        ::Broadcast.Style{Tuple}
+    ) where {N}
     return DefaultArrayStyle{N}()
 end
 
-function Base.similar(bc::Broadcasted{<:StridedArrayStyle{N}}, ::Type{T}) where {N,T}
+function Base.similar(bc::Broadcasted{<:StridedArrayStyle{N}}, ::Type{T}) where {N, T}
     return StridedView(similar(convert(Broadcasted{DefaultArrayStyle{N}}, bc), T))
 end
 
-Base.dotview(a::StridedView{<:Any,N}, I::Vararg{SliceIndex,N}) where {N} = getindex(a, I...)
+Base.dotview(a::StridedView{<:Any, N}, I::Vararg{SliceIndex, N}) where {N} = getindex(a, I...)
 
 # Broadcasting implementation
-@inline function Base.copyto!(dest::StridedView{<:Any,N},
-                              bc::Broadcasted{StridedArrayStyle{N}}) where {N}
+@inline function Base.copyto!(
+        dest::StridedView{<:Any, N},
+        bc::Broadcasted{StridedArrayStyle{N}}
+    ) where {N}
     # convert to map
 
     # flatten and only keep the StridedView arguments
@@ -36,7 +40,7 @@ Base.dotview(a::StridedView{<:Any,N}, I::Vararg{SliceIndex,N}) where {N} = getin
     return dest
 end
 
-const WrappedScalarArgs = Union{AbstractArray{<:Any,0},Ref{<:Any}}
+const WrappedScalarArgs = Union{AbstractArray{<:Any, 0}, Ref{<:Any}}
 
 @inline function capturestridedargs(t::Broadcasted, rest...)
     return (capturestridedargs(t.args...)..., capturestridedargs(rest...)...)
@@ -64,7 +68,7 @@ function promoteshape1(sz::Dims{N}, a::StridedView) where {N}
     return StridedView(a.parent, sz, newstrides, a.offset, a.op)
 end
 
-struct CaptureArgs{F,Args<:Tuple}
+struct CaptureArgs{F, Args <: Tuple}
     f::F
     args::Args
 end
@@ -84,7 +88,7 @@ end
 
 # Evaluate CaptureArgs
 (c::CaptureArgs)(vals...) = consume(c, vals)[1]
-@inline function consume(c::CaptureArgs{F,Args}, vals) where {F,Args}
+@inline function consume(c::CaptureArgs{F, Args}, vals) where {F, Args}
     args, newvals = t_consume(c.args, vals)
     return c.f(args...), newvals
 end
