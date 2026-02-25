@@ -4,8 +4,7 @@ using Random
 using Strided
 using Strided: StridedView
 using Aqua
-using CUDA, GPUArrays
-using CUDA: Adapt
+using AMDGPU, CUDA, GPUArrays
 
 Random.seed!(1234)
 
@@ -29,9 +28,13 @@ if !is_buildkite
     include("blasmultests.jl")
     Strided.disable_threaded_mul()
 
-    Aqua.test_all(Strided; piracies=false)
+    Aqua.test_all(Strided; piracies = false)
 end
 
 if CUDA.functional()
     include("cuda.jl")
+end
+
+if AMDGPU.functional()
+    include("amd.jl")
 end
