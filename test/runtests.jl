@@ -3,8 +3,7 @@ using LinearAlgebra
 using Random
 using Strided
 using Strided: StridedView
-using CUDA, GPUArrays
-using CUDA: Adapt
+using AMDGPU, CUDA, GPUArrays
 
 Random.seed!(1234)
 
@@ -35,4 +34,8 @@ end
 
 if CUDA.functional()
     include("cuda.jl")
+end
+
+if AMDGPU.functional()
+    include("amd.jl")
 end
