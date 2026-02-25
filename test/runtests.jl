@@ -24,4 +24,4 @@ include("blasmultests.jl")
 Strided.disable_threaded_mul()
 
 using Aqua
-Aqua.test_all(Strided; piracies=false)
+Aqua.test_all(Strided; piracies = false)

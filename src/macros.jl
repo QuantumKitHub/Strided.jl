@@ -15,11 +15,15 @@ function _strided(ex::Expr)
             return Expr(:call, ex.args[1], map(_strided, ex.args[2:end])...)
         end
     elseif (ex.head == :(=) || ex.head == :(kw)) && ex.args[1] isa Symbol
-        return Expr(ex.head, ex.args[1],
-                    Expr(:call, :(Strided.maybeunstrided), _strided(ex.args[2])))
+        return Expr(
+            ex.head, ex.args[1],
+            Expr(:call, :(Strided.maybeunstrided), _strided(ex.args[2]))
+        )
     elseif (ex.head == :(->))
-        return Expr(ex.head, ex.args[1],
-                    Expr(:call, :(Strided.maybeunstrided), _strided(ex.args[2])))
+        return Expr(
+            ex.head, ex.args[1],
+            Expr(:call, :(Strided.maybeunstrided), _strided(ex.args[2]))
+        )
     else
         return Expr(ex.head, map(_strided, ex.args)...)
     end
@@ -35,7 +39,7 @@ maybestrided(A) = A
 function maybeunstrided(A::StridedView)
     Ap = A.parent
     if size(A) == size(Ap) && strides(A) == strides(Ap) && offset(A) == 0 &&
-       A.op == identity
+            A.op == identity
         return Ap
     else
         return reshape(copy(A).parent, size(A))
@@ -52,8 +56,12 @@ macro unsafe_strided(args...)
         error("The first arguments to `@unsafe_strided` must be variable names")
 
     ex = Expr(:let, Expr(:block, [:($s = Strided.StridedView($s)) for s in syms]...), ex)
-    warnex = :(Base.depwarn("`@unsafe_strided A B C ... ex` is deprecated, use `@strided ex` instead.",
-                            Symbol("@unsafe_strided"); force=true))
+    warnex = :(
+        Base.depwarn(
+            "`@unsafe_strided A B C ... ex` is deprecated, use `@strided ex` instead.",
+            Symbol("@unsafe_strided"); force = true
+        )
+    )
     return esc(Expr(:block, warnex, ex))
 end
 
