@@ -3,8 +3,8 @@ using LinearAlgebra
 using Random
 using Strided
 using Strided: StridedView
-using CUDA
 using Aqua
+using CUDA, GPUArrays
 using CUDA: Adapt
 
 Random.seed!(1234)
