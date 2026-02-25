@@ -1,4 +1,4 @@
-<img src="https://github.com/Jutho/Strided.jl/blob/main/docs/src/assets/logo.svg"
+<img src="https://github.com/QuantumKitHub/Strided.jl/blob/main/docs/src/assets/logo.svg"
 width="150">
 
 # Strided.jl
@@ -9,19 +9,19 @@ Strided array views with efficient (cache-friendly and multithreaded) manipulati
 |:----------------:|:------------:|:---------------------:|:--------------|
 | [![CI][ci-img]][ci-url] [![CI (Julia nightly)][ci-julia-nightly-img]][ci-julia-nightly-url] | [![Codecov][codecov-img]][codecov-url] | [![Aqua QA][aqua-img]][aqua-url] | [![Strided Downloads][downloads-img]][downloads-url] |
 
-[github-img]: https://github.com/Jutho/Strided.jl/workflows/CI/badge.svg
-[github-url]: https://github.com/Jutho/Strided.jl/actions?query=workflow%3ACI
+[github-img]: https://github.com/QuantumKitHub/Strided.jl/workflows/CI/badge.svg
+[github-url]: https://github.com/QuantumKitHub/Strided.jl/actions?query=workflow%3ACI
 
-[ci-img]: https://github.com/Jutho/Strided.jl/workflows/CI/badge.svg
-[ci-url]: https://github.com/Jutho/Strided.jl/actions?query=workflow%3ACI
+[ci-img]: https://github.com/QuantumKitHub/Strided.jl/workflows/CI/badge.svg
+[ci-url]: https://github.com/QuantumKitHub/Strided.jl/actions?query=workflow%3ACI
 
 [ci-julia-nightly-img]:
-    https://github.com/Jutho/Strided.jl/workflows/CI%20(Julia%20nightly)/badge.svg
+    https://github.com/QuantumKitHub/Strided.jl/workflows/CI%20(Julia%20nightly)/badge.svg
 [ci-julia-nightly-url]:
-    https://github.com/Jutho/Strided.jl/actions?query=workflow%3A%22CI+%28Julia+nightly%29%22
+    https://github.com/QuantumKitHub/Strided.jl/actions?query=workflow%3A%22CI+%28Julia+nightly%29%22
 
-[codecov-img]: https://codecov.io/gh/Jutho/Strided.jl/branch/main/graph/badge.svg
-[codecov-url]: https://codecov.io/gh/Jutho/Strided.jl
+[codecov-img]: https://codecov.io/gh/QuantumKitHub/Strided.jl/branch/main/graph/badge.svg
+[codecov-url]: https://codecov.io/gh/QuantumKitHub/Strided.jl
 
 [aqua-img]: https://raw.githubusercontent.com/JuliaTesting/Aqua.jl/master/badge.svg
 [aqua-url]: https://github.com/JuliaTesting/Aqua.jl
