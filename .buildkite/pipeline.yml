@@ -1,0 +1,65 @@
+env:
+  SECRET_CODECOV_TOKEN: "EEXB5DS9rR3VXck1NzJougBwxy+3bGKAX9sq1hTwe+rvftmQzdnpy3MlJXLUXQXnBvjezhHZpt07nlG1p9Pi39bnUIddPJHJVVbtqjiGbVuAjVno2tcm8cvi/mYDPoJw7hs8G36IVDb3wklO9wAiO7vwO2br8LQOHMNZBTCUfkb30aT3e/yBnb2QiwNspKCvcd7XYpsmMy78Egdg219sfZ783fG/H7VHv0YzZThj+IAUhm8ftsPURHRmHk28wSdFGzwI2CX8nEx4LgtDhqa+JH84YajIiwWaFymfkw6phpSF3KQNlR53qRWUDD6hClhOizmYyQuZZ8TO5gnNDsrGLg==;U2FsdGVkX1/pfvZY/FJSU7D+DE+6I18s5BSfa63C+31RoDKiHqENegG4whXuxZ5a6YE0XegF8jOretp+E7FiyQ=="
+
+steps:
+  - label: "Julia v1 -- CUDA"
+    plugins:
+      - JuliaCI/julia#v1:
+          version: "1"
+      - JuliaCI/julia-test#v1: ~
+      - JuliaCI/julia-coverage#v1:
+          dirs:
+            - src
+            - ext
+    agents:
+      queue: "juliagpu"
+      cuda: "*"
+    if: build.message !~ /\[skip tests\]/
+    timeout_in_minutes: 30
+
+  - label: "Julia LTS -- CUDA"
+    plugins:
+      - JuliaCI/julia#v1:
+          version: "1.10" # "lts" isn't valid
+      - JuliaCI/julia-test#v1: ~
+      - JuliaCI/julia-coverage#v1:
+          dirs:
+            - src
+            - ext
+    agents:
+      queue: "juliagpu"
+      cuda: "*"
+    if: build.message !~ /\[skip tests\]/
+    timeout_in_minutes: 30
+  
+  - label: "Julia v1 -- AMDGPU"
+    plugins:
+      - JuliaCI/julia#v1:
+          version: "1"
+      - JuliaCI/julia-test#v1: ~
+      - JuliaCI/julia-coverage#v1:
+          dirs:
+            - src
+            - ext
+    agents:
+      queue: "juliagpu"
+      rocm: "*"
+      rocmgpu: "*"
+    if: build.message !~ /\[skip tests\]/
+    timeout_in_minutes: 30
+
+  - label: "Julia LTS -- AMDGPU"
+    plugins:
+      - JuliaCI/julia#v1:
+          version: "1.10" # "lts" isn't valid
+      - JuliaCI/julia-test#v1: ~
+      - JuliaCI/julia-coverage#v1:
+          dirs:
+            - src
+            - ext
+    agents:
+      queue: "juliagpu"
+      rocm: "*"
+      rocmgpu: "*"
+    if: build.message !~ /\[skip tests\]/
+    timeout_in_minutes: 30

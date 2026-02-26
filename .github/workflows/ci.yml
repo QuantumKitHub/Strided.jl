@@ -2,7 +2,6 @@ name: CI
 on:
   push:
     branches:
-      - 'master'
       - 'main'
       - 'release-'
     tags: '*'
@@ -21,7 +20,6 @@ jobs:
       fail-fast: false
       matrix:
         version:
-          - '1.6' # previous LTS release
           - 'lts' # current LTS release
           - '1' # current stable release
         os:

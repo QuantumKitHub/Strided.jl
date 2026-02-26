@@ -24,7 +24,7 @@ end
             B3 = permutedims(StridedView(R3), randperm(N))
             A1 = convert(Array, B1)
             A2 = convert(Array{T}, B2) # test different converts
-            A3 = convert(Array{T,N}, B3)
+            A3 = convert(Array{T, N}, B3)
             C1 = deepcopy(B1)
 
             @test rmul!(B1, 1 // 2) ≈ rmul!(A1, 1 // 2)
@@ -34,7 +34,7 @@ end
             @test axpby!(1 // 3, B1, 1 // 2, B3) ≈ axpby!(1 // 3, A1, 1 // 2, A3)
             @test axpby!(1, B2, 1, B1) ≈ axpby!(1, A2, 1, A1)
             @test map((x, y, z) -> sin(x) + y / exp(-abs(z)), B1, B2, B3) ≈
-                  map((x, y, z) -> sin(x) + y / exp(-abs(z)), A1, A2, A3)
+                map((x, y, z) -> sin(x) + y / exp(-abs(z)), A1, A2, A3)
             @test map((x, y, z) -> sin(x) + y / exp(-abs(z)), B1, B2, B3) isa StridedView
             @test map((x, y, z) -> sin(x) + y / exp(-abs(z)), B1, A2, B3) isa Array
             @test mul!(B1, 1, B2) ≈ mul!(A1, 1, A2)
@@ -51,12 +51,12 @@ end
         B3 = permutedims(StridedView(R3), randperm(3))
         A1 = convert(Array, B1)
         A2 = convert(Array{T}, B2)
-        A3 = convert(Array{T,3}, B3)
+        A3 = convert(Array{T, 3}, B3)
 
         @test @inferred(B1 .+ sin.(B2 .- 3)) ≈ A1 .+ sin.(A2 .- 3)
         @test @inferred(B2' .* B3 .- Ref(0.5)) ≈ A2' .* A3 .- Ref(0.5)
         @test @inferred(B2' .* B3 .- max.(abs.(B1), real.(B3))) ≈
-              A2' .* A3 .- max.(abs.(A1), real.(A3))
+            A2' .* A3 .- max.(abs.(A1), real.(A3))
 
         @test (B1 .+ sin.(B2 .- 3)) isa StridedView
         @test (B2' .* B3 .- Ref(0.5)) isa StridedView
@@ -68,41 +68,61 @@ end
 @testset "mapreduce with StridedView" begin
     @testset for T in (Float32, Float64, ComplexF32, ComplexF64)
         R1 = rand(T, (10, 10, 10, 10, 10, 10))
-        @test sum(R1; dims=(1, 3, 5)) ≈ sum(StridedView(R1); dims=(1, 3, 5))
-        @test mapreduce(sin, +, R1; dims=(1, 3, 5)) ≈
-              mapreduce(sin, +, StridedView(R1); dims=(1, 3, 5))
+        @test sum(R1; dims = (1, 3, 5)) ≈ sum(StridedView(R1); dims = (1, 3, 5))
+        @test mapreduce(sin, +, R1; dims = (1, 3, 5)) ≈
+            mapreduce(sin, +, StridedView(R1); dims = (1, 3, 5))
         R2 = rand(T, (10, 10, 10))
         R2c = copy(R2)
-        @test Strided._mapreducedim!(sin, +, identity, (10, 10, 10, 10, 10, 10),
-                                     (sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)),
-                                      StridedView(R1))) ≈
-              mapreduce(sin, +, R1; dims=(2, 3, 6)) .+ reshape(R2, (10, 1, 1, 10, 10, 1))
+        @test Strided._mapreducedim!(
+            sin, +, identity, (10, 10, 10, 10, 10, 10),
+            (
+                sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)),
+                StridedView(R1),
+            )
+        ) ≈
+            mapreduce(sin, +, R1; dims = (2, 3, 6)) .+ reshape(R2, (10, 1, 1, 10, 10, 1))
         R2c = copy(R2)
-        @test Strided._mapreducedim!(sin, +, x -> 0, (10, 10, 10, 10, 10, 10),
-                                     (sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)),
-                                      StridedView(R1))) ≈
-              mapreduce(sin, +, R1; dims=(2, 3, 6))
+        @test Strided._mapreducedim!(
+            sin, +, x -> 0, (10, 10, 10, 10, 10, 10),
+            (
+                sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)),
+                StridedView(R1),
+            )
+        ) ≈
+            mapreduce(sin, +, R1; dims = (2, 3, 6))
         R2c = copy(R2)
         β = rand(T)
-        @test Strided._mapreducedim!(sin, +, x -> β * x, (10, 10, 10, 10, 10, 10),
-                                     (sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)),
-                                      StridedView(R1))) ≈
-              mapreduce(sin, +, R1; dims=(2, 3, 6)) .+
-              β .* reshape(R2, (10, 1, 1, 10, 10, 1))
+        @test Strided._mapreducedim!(
+            sin, +, x -> β * x, (10, 10, 10, 10, 10, 10),
+            (
+                sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)),
+                StridedView(R1),
+            )
+        ) ≈
+            mapreduce(sin, +, R1; dims = (2, 3, 6)) .+
+            β .* reshape(R2, (10, 1, 1, 10, 10, 1))
         R2c = copy(R2)
-        @test Strided._mapreducedim!(sin, +, x -> β, (10, 10, 10, 10, 10, 10),
-                                     (sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)),
-                                      StridedView(R1))) ≈
-              mapreduce(sin, +, R1; dims=(2, 3, 6), init=β)
+        @test Strided._mapreducedim!(
+            sin, +, x -> β, (10, 10, 10, 10, 10, 10),
+            (
+                sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)),
+                StridedView(R1),
+            )
+        ) ≈
+            mapreduce(sin, +, R1; dims = (2, 3, 6), init = β)
         R2c = copy(R2)
-        @test Strided._mapreducedim!(sin, +, conj, (10, 10, 10, 10, 10, 10),
-                                     (sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)),
-                                      StridedView(R1))) ≈
-              mapreduce(sin, +, R1; dims=(2, 3, 6)) .+
-              conj.(reshape(R2, (10, 1, 1, 10, 10, 1)))
+        @test Strided._mapreducedim!(
+            sin, +, conj, (10, 10, 10, 10, 10, 10),
+            (
+                sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)),
+                StridedView(R1),
+            )
+        ) ≈
+            mapreduce(sin, +, R1; dims = (2, 3, 6)) .+
+            conj.(reshape(R2, (10, 1, 1, 10, 10, 1)))
 
         R3 = rand(T, (100, 100, 2))
-        @test sum(R3; dims=(1, 2)) ≈ sum(StridedView(R3); dims=(1, 2))
+        @test sum(R3; dims = (1, 2)) ≈ sum(StridedView(R3); dims = (1, 2))
     end
 end
 
@@ -136,49 +156,57 @@ end
         @test (@strided(A1 .+ sin.(A2 .- 3))) ≈ A1 .+ sin.(A2 .- 3)
         @test (@strided(A2' .* A3 .- Ref(0.5))) ≈ A2' .* A3 .- Ref(0.5)
         @test (@strided(A2' .* A3 .- max.(abs.(A1), real.(A3)))) ≈
-              A2' .* A3 .- max.(abs.(A1), real.(A3))
+            A2' .* A3 .- max.(abs.(A1), real.(A3))
 
         B2 = view(A2, :, 1:2:10)
         @test (@strided(A1 .+ sin.(view(A2, :, 1:2:10) .- 3))) ≈
-              (@strided(A1 .+ sin.(B2 .- 3))) ≈
-              A1 .+ sin.(view(A2, :, 1:2:10) .- 3)
+            (@strided(A1 .+ sin.(B2 .- 3))) ≈
+            A1 .+ sin.(view(A2, :, 1:2:10) .- 3)
 
         B2 = view(A2', :, 1:6)
         B3 = view(A3, :, 1:6, 4)
         @test (@strided(view(A2', :, 1:6) .* view(A3, :, 1:6, 4) .- Ref(0.5))) ≈
-              (@strided(B2 .* B3 .- Ref(0.5))) ≈
-              view(A2', :, 1:6) .* view(A3, :, 1:6, 4) .- Ref(0.5)
+            (@strided(B2 .* B3 .- Ref(0.5))) ≈
+            view(A2', :, 1:6) .* view(A3, :, 1:6, 4) .- Ref(0.5)
 
         B2 = view(A2, :, 3)
         B3 = view(A3, 1:5, :, 2:2:10)
         B1 = view(A1, 1:5)
         B3b = view(A3, 4:4, 4:4, 2:2:10)
-        @test (@strided(view(A2, :, 3)' .* view(A3, 1:5, :, 2:2:10) .-
-                        max.(abs.(view(A1, 1:5)), real.(view(A3, 4:4, 4:4, 2:2:10))))) ≈
-              (@strided(B2' .* B3 .- max.(abs.(B1), real.(B3b)))) ≈
-              view(A2, :, 3)' .* view(A3, 1:5, :, 2:2:10) .-
-              max.(abs.(view(A1, 1:5)), real.(view(A3, 4:4, 4:4, 2:2:10)))
+        @test (
+                @strided(
+                    view(A2, :, 3)' .* view(A3, 1:5, :, 2:2:10) .-
+                    max.(abs.(view(A1, 1:5)), real.(view(A3, 4:4, 4:4, 2:2:10)))
+                )
+            ) ≈
+            (@strided(B2' .* B3 .- max.(abs.(B1), real.(B3b)))) ≈
+            view(A2, :, 3)' .* view(A3, 1:5, :, 2:2:10) .-
+            max.(abs.(view(A1, 1:5)), real.(view(A3, 4:4, 4:4, 2:2:10)))
 
         B2 = reshape(A2, (10, 2, 5))
         @test (@strided(A1 .+ sin.(reshape(A2, (10, 2, 5)) .- 3))) ≈
-              (@strided(A1 .+ sin.(B2 .- 3))) ≈
-              A1 .+ sin.(reshape(A2, (10, 2, 5)) .- 3)
+            (@strided(A1 .+ sin.(B2 .- 3))) ≈
+            A1 .+ sin.(reshape(A2, (10, 2, 5)) .- 3)
 
         B2 = reshape(A2, 1, 100)
         B3 = reshape(A3, 100, 1, 10)
         @test (@strided(reshape(A2, 1, 100)' .* reshape(A3, 100, 1, 10) .- Ref(0.5))) ≈
-              (@strided(B2' .* B3 .- Ref(0.5))) ≈
-              reshape(A2, 1, 100)' .* reshape(A3, 100, 1, 10) .- Ref(0.5)
+            (@strided(B2' .* B3 .- Ref(0.5))) ≈
+            reshape(A2, 1, 100)' .* reshape(A3, 100, 1, 10) .- Ref(0.5)
 
         B2 = view(A2, :, 3)
         B3 = reshape(view(A3, 1:5, :, :), 5, 10, 5, 2)
         B1 = view(A1, 1:5)
         B3b = view(A3, 4:4, 4:4, 2:2:10)
-        @test (@strided(view(A2, :, 3)' .* reshape(view(A3, 1:5, :, :), 5, 10, 5, 2) .-
-                        max.(abs.(view(A1, 1:5)), real.(view(A3, 4:4, 4:4, 2:2:10))))) ≈
-              (@strided(B2' .* B3 .- max.(abs.(B1), real.(B3b)))) ≈
-              view(A2, :, 3)' .* reshape(view(A3, 1:5, :, :), 5, 10, 5, 2) .-
-              max.(abs.(view(A1, 1:5)), real.(view(A3, 4:4, 4:4, 2:2:10)))
+        @test (
+                @strided(
+                    view(A2, :, 3)' .* reshape(view(A3, 1:5, :, :), 5, 10, 5, 2) .-
+                    max.(abs.(view(A1, 1:5)), real.(view(A3, 4:4, 4:4, 2:2:10)))
+                )
+            ) ≈
+            (@strided(B2' .* B3 .- max.(abs.(B1), real.(B3b)))) ≈
+            view(A2, :, 3)' .* reshape(view(A3, 1:5, :, :), 5, 10, 5, 2) .-
+            max.(abs.(view(A1, 1:5)), real.(view(A3, 4:4, 4:4, 2:2:10)))
 
         x = @strided begin
             p = :A => A1
@@ -199,54 +227,70 @@ end
         @test (@unsafe_strided(A1, A2, A1 .+ sin.(A2 .- 3))) ≈ A1 .+ sin.(A2 .- 3)
         @test (@unsafe_strided(A2, A3, A2' .* A3 .- Ref(0.5))) ≈ A2' .* A3 .- Ref(0.5)
         @test (@unsafe_strided(A1, A2, A3, A2' .* A3 .- max.(abs.(A1), real.(A3)))) ≈
-              A2' .* A3 .- max.(abs.(A1), real.(A3))
+            A2' .* A3 .- max.(abs.(A1), real.(A3))
 
         B2 = view(A2, :, 1:2:10)
         @test (@unsafe_strided(A1, A2, A1 .+ sin.(view(A2, :, 1:2:10) .- 3))) ≈
-              (@unsafe_strided(A1, B2, A1 .+ sin.(B2 .- 3))) ≈
-              A1 .+ sin.(view(A2, :, 1:2:10) .- 3)
+            (@unsafe_strided(A1, B2, A1 .+ sin.(B2 .- 3))) ≈
+            A1 .+ sin.(view(A2, :, 1:2:10) .- 3)
 
         B2 = view(A2', :, 1:6)
         B3 = view(A3, :, 1:6, 4)
-        @test (@unsafe_strided(A2, A3,
-                               view(A2', :, 1:6) .* view(A3, :, 1:6, 4) .- Ref(0.5))) ≈
-              (@unsafe_strided(B2, B3, B2 .* B3 .- Ref(0.5))) ≈
-              view(A2', :, 1:6) .* view(A3, :, 1:6, 4) .- Ref(0.5)
+        @test (
+                @unsafe_strided(
+                    A2, A3,
+                    view(A2', :, 1:6) .* view(A3, :, 1:6, 4) .- Ref(0.5)
+                )
+            ) ≈
+            (@unsafe_strided(B2, B3, B2 .* B3 .- Ref(0.5))) ≈
+            view(A2', :, 1:6) .* view(A3, :, 1:6, 4) .- Ref(0.5)
 
         B2 = view(A2, :, 3)
         B3 = view(A3, 1:5, :, 2:2:10)
         B1 = view(A1, 1:5)
         B3b = view(A3, 4:4, 4:4, 2:2:10)
-        @test (@unsafe_strided(A1, A2, A3,
-                               view(A2, :, 3)' .* view(A3, 1:5, :, 2:2:10) .-
-                               max.(abs.(view(A1, 1:5)), real.(view(A3, 4:4, 4:4, 2:2:10))))) ≈
-              (@unsafe_strided(B1, B2, B3, B2' .* B3 .- max.(abs.(B1), real.(B3b)))) ≈
-              view(A2, :, 3)' .* view(A3, 1:5, :, 2:2:10) .-
-              max.(abs.(view(A1, 1:5)), real.(view(A3, 4:4, 4:4, 2:2:10)))
+        @test (
+                @unsafe_strided(
+                    A1, A2, A3,
+                    view(A2, :, 3)' .* view(A3, 1:5, :, 2:2:10) .-
+                    max.(abs.(view(A1, 1:5)), real.(view(A3, 4:4, 4:4, 2:2:10)))
+                )
+            ) ≈
+            (@unsafe_strided(B1, B2, B3, B2' .* B3 .- max.(abs.(B1), real.(B3b)))) ≈
+            view(A2, :, 3)' .* view(A3, 1:5, :, 2:2:10) .-
+            max.(abs.(view(A1, 1:5)), real.(view(A3, 4:4, 4:4, 2:2:10)))
 
         B2 = reshape(A2, (10, 2, 5))
         @test (@unsafe_strided(A1, A2, A1 .+ sin.(reshape(A2, (10, 2, 5)) .- 3))) ≈
-              (@unsafe_strided(A1, B2, A1 .+ sin.(B2 .- 3))) ≈
-              A1 .+ sin.(reshape(A2, (10, 2, 5)) .- 3)
+            (@unsafe_strided(A1, B2, A1 .+ sin.(B2 .- 3))) ≈
+            A1 .+ sin.(reshape(A2, (10, 2, 5)) .- 3)
 
         B2 = reshape(A2, 1, 100)
         B3 = reshape(A3, 100, 1, 10)
-        @test (@unsafe_strided(A2, A3,
-                               reshape(A2, 1, 100)' .* reshape(A3, 100, 1, 10) .- Ref(0.5))) ≈
-              (@unsafe_strided(B2, B3, B2' .* B3 .- Ref(0.5))) ≈
-              reshape(A2, 1, 100)' .* reshape(A3, 100, 1, 10) .- Ref(0.5)
+        @test (
+                @unsafe_strided(
+                    A2, A3,
+                    reshape(A2, 1, 100)' .* reshape(A3, 100, 1, 10) .- Ref(0.5)
+                )
+            ) ≈
+            (@unsafe_strided(B2, B3, B2' .* B3 .- Ref(0.5))) ≈
+            reshape(A2, 1, 100)' .* reshape(A3, 100, 1, 10) .- Ref(0.5)
 
         B2 = view(A2, :, 3)
         B3 = reshape(view(A3, 1:5, :, :), 5, 10, 5, 2)
         B1 = view(A1, 1:5)
         B3b = view(A3, 4:4, 4:4, 2:2:10)
-        @test (@unsafe_strided(A1, A2, A3,
-                               view(A2, :, 3)' .*
-                               reshape(view(A3, 1:5, :, :), 5, 10, 5, 2) .-
-                               max.(abs.(view(A1, 1:5)), real.(view(A3, 4:4, 4:4, 2:2:10))))) ≈
-              (@unsafe_strided(B1, B2, B3, B2' .* B3 .- max.(abs.(B1), real.(B3b)))) ≈
-              view(A2, :, 3)' .* reshape(view(A3, 1:5, :, :), 5, 10, 5, 2) .-
-              max.(abs.(view(A1, 1:5)), real.(view(A3, 4:4, 4:4, 2:2:10)))
+        @test (
+                @unsafe_strided(
+                    A1, A2, A3,
+                    view(A2, :, 3)' .*
+                    reshape(view(A3, 1:5, :, :), 5, 10, 5, 2) .-
+                    max.(abs.(view(A1, 1:5)), real.(view(A3, 4:4, 4:4, 2:2:10)))
+                )
+            ) ≈
+            (@unsafe_strided(B1, B2, B3, B2' .* B3 .- max.(abs.(B1), real.(B3b)))) ≈
+            view(A2, :, 3)' .* reshape(view(A3, 1:5, :, :), 5, 10, 5, 2) .-
+            max.(abs.(view(A1, 1:5)), real.(view(A3, 4:4, 4:4, 2:2:10)))
     end
 end
 
