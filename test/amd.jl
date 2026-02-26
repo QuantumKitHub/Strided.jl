@@ -4,7 +4,7 @@ for T in (Float32, Float64, Complex{Float32}, Complex{Float64})
             if iszero(m1 * m2)
                 A1 = AMDGPU.ROCMatrix{T}(undef, (m1, m2))
             else
-                A1 = AMDGPU.randn(T, (m1, m2))
+                A1 = ROCMatrix(randn(T, (m1, m2)))
             end
             A2 = similar(A1)
             A1c = copy(A1)
