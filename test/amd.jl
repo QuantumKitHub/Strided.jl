@@ -12,7 +12,7 @@ for T in (Float32, Float64, Complex{Float32}, Complex{Float64})
             B1 = f1(StridedView(A1c))
             B2 = f2(StridedView(A2c))
             axes(f1(A1)) == axes(f2(A2)) || continue
-            @test collect(ROCMatrix(copy!(f2(A2), f1(A1)))) == Adapt.adapt(Vector{T}, copy!(B2, B1))
+            @test collect(ROCMatrix(copy!(f2(A2), f1(A1)))) == AMDGPU.Adapt.adapt(Vector{T}, copy!(B2, B1))
         end
     end
 end
