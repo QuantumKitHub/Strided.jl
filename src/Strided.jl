@@ -9,8 +9,8 @@ using LinearAlgebra
 using TupleTools
 # using TupleTools: StaticLength
 
-using StridedViews
-using StridedViews: offset, ParentIndex
+include("auxiliary.jl")
+include("stridedview.jl")
 
 # re-export?
 export StridedView, @strided, sreshape, sview, isstrided
