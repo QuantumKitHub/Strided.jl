@@ -1,11 +1,10 @@
 name = "Strided"
 uuid = "5e0ebb24-38b0-5f93-81fe-25c709ecae67"
-version = "2.3.5"
+version = "3.0.0"
 authors = ["Lukas Devos <lukas.devos@ugent.be>", "Maarten Van Damme <maartenvd1994@gmail.com>", "Jutho Haegeman <jutho.haegeman@ugent.be>"]
 
 [deps]
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
-StridedViews = "4db3bf67-4bd7-4b4e-b153-31dc3fb37143"
 TupleTools = "9d95972d-f1c8-5527-a6e0-b4b365fa01f6"
 
 [weakdeps]
@@ -13,25 +12,30 @@ AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
 JLArrays = "27aeb0d3-9eb9-45fb-866b-73c2ecf80fcb"
 GPUArrays = "0c68f7d7-f131-5f86-a1c3-88cf8149b2d7"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+JLArrays = "27aeb0d3-9eb9-45fb-866b-73c2ecf80fcb"
+PtrArrays = "43287f4e-b6f4-7ad1-bb20-aadabca52c3d"
 
 [extensions]
 StridedAMDGPUExt = "AMDGPU"
 StridedJLArraysExt = "JLArrays"
 StridedGPUArraysExt = "GPUArrays"
 StridedCUDAExt = "CUDA"
+StridedJLArraysExt = "JLArrays"
+StridedPtrArraysExt = "PtrArrays"
 
 [compat]
 AMDGPU = "2"
 Aqua = "0.8"
-CUDA = "5"
-JLArrays = "0.3.1"
+CUDA = "4,5"
 GPUArrays = "11.4.1"
-LinearAlgebra = "1.6"
-Random = "1.6"
-StridedViews = "0.4.6"
-Test = "1.6"
+JLArrays = "0.3.1"
+JET = "0.9"
+LinearAlgebra = "1.10"
+PtrArrays = "1.2.0"
+Random = "1.10"
+Test = "1.10"
 TupleTools = "1.6"
-julia = "1.6"
+julia = "1.10"
 
 [extras]
 AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
@@ -39,8 +43,11 @@ Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 JLArrays = "27aeb0d3-9eb9-45fb-866b-73c2ecf80fcb"
 GPUArrays = "0c68f7d7-f131-5f86-a1c3-88cf8149b2d7"
+JLArrays = "27aeb0d3-9eb9-45fb-866b-73c2ecf80fcb"
+JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
+PtrArrays = "43287f4e-b6f4-7ad1-bb20-aadabca52c3d"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Test", "Random", "Aqua", "AMDGPU", "CUDA", "GPUArrays", "JLArrays"]
+test = ["Test", "Random", "Aqua", "AMDGPU", "CUDA", "GPUArrays", "JLArrays", "JET", "PtrArrays"]
