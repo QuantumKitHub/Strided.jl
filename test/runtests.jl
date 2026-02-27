@@ -29,6 +29,8 @@ if !is_buildkite
     include("blasmultests.jl")
     Strided.disable_threaded_mul()
 
+    include("stridedviewtests.jl")
+
     Aqua.test_all(Strided; piracies = false)
 end
 
