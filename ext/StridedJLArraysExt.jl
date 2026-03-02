@@ -13,11 +13,4 @@ function Base.copy!(dst::StridedView{TD, ND, TAD, FD}, src::StridedView{TS, NS, 
     return dst
 end
 
-function Base.copy!(dst::AbstractArray{TD, ND}, src::StridedView{TS, NS, TAS, FS}) where {TD <: Number, ND, TS <: Number, NS, TAS <: JLArray{TS}, FS <: ALL_FS}
-    bc_style = Base.Broadcast.BroadcastStyle(TAS)
-    bc = Base.Broadcast.Broadcasted(bc_style, identity, (src,), axes(dst))
-    GPUArrays._copyto!(dst, bc)
-    return dst
-end
-
 end
