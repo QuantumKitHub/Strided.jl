@@ -1,6 +1,6 @@
 name = "Strided"
 uuid = "5e0ebb24-38b0-5f93-81fe-25c709ecae67"
-version = "2.3.2"
+version = "2.3.3"
 authors = ["Lukas Devos <lukas.devos@ugent.be>", "Maarten Van Damme <maartenvd1994@gmail.com>", "Jutho Haegeman <jutho.haegeman@ugent.be>"]
 
 [deps]
@@ -28,7 +28,7 @@ JLArrays = "0.3.1"
 GPUArrays = "11.4.1"
 LinearAlgebra = "1.6"
 Random = "1.6"
-StridedViews = "0.4.5"
+StridedViews = "0.4.6"
 Test = "1.6"
 TupleTools = "1.6"
 julia = "1.6"
