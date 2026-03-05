@@ -2,7 +2,7 @@ module StridedGPUArraysExt
 
 using Strided, GPUArrays, LinearAlgebra
 using GPUArrays: Adapt, KernelAbstractions
-using GPUArrays.KernelAbstractions: @kernel, @index, Global, Linear
+using GPUArrays.KernelAbstractions: @kernel, @index
 
 ALL_FS = Union{typeof(adjoint), typeof(conj), typeof(identity), typeof(transpose)}
 
