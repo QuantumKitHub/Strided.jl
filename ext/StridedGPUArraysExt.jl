@@ -1,6 +1,6 @@
 module StridedGPUArraysExt
 
-using Strided, GPUArrays, LinearAlgebra
+using Strided, GPUArrays
 using GPUArrays: Adapt, KernelAbstractions
 using GPUArrays.KernelAbstractions: @kernel, @index
 
@@ -29,16 +29,9 @@ function Base.fill!(A::StridedView{T, N, TA, F}, x) where {T, N, TA <: AbstractG
     end
     # ndims check for 0D support
     kernel = fill_kernel!(KernelAbstractions.get_backend(A))
-    kernel(A, x; ndrange = length(A))
+    f_x = F <: Union{typeof(conj), typeof(adjoint)} ? conj(x) : x
+    kernel(A, f_x; ndrange = length(A))
     return A
-end
-
-function LinearAlgebra.mul!(
-        C::StridedView{TC, 2, <:AnyGPUArray{TC}},
-        A::StridedView{TA, 2, <:AnyGPUArray{TA}}, B::AnyGPUMatrix{TB},
-        α::Number = true, β::Number = false
-    ) where {TA, TB, TC}
-    return mul!(C, A, StridedView(B), α, β)
 end
 
 function Strided.__mul!(
