@@ -12,6 +12,8 @@ for T in (Float32, Float64, Complex{Float32}, Complex{Float64})
             axes(f1(A1)) == axes(f2(A2)) || continue
             @test collect(CuMatrix(copy!(f2(A2), f1(A1)))) == CUDA.Adapt.adapt(Vector{T}, copy!(B2, B1))
             @test copy!(zA1, f1(A1)) == copy!(zA2, B1)
+            x = rand(T)
+            @test f1(StridedView(CUDA.Adapt.adapt(Vector{T}, fill!(A1c, x)))) == CUDA.Adapt.adapt(Vector{T}, fill!(B1, x))
         end
     end
 end

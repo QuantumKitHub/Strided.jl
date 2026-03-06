@@ -11,6 +11,7 @@ Random.seed!(1234)
 is_buildkite = get(ENV, "BUILDKITE", "false") == "true"
 
 if !is_buildkite
+    include("jlarrays.jl")
     println("Base.Threads.nthreads() =  $(Base.Threads.nthreads())")
 
     println("Running tests single-threaded:")
@@ -28,7 +29,6 @@ if !is_buildkite
     include("blasmultests.jl")
     Strided.disable_threaded_mul()
 
-    include("jlarrays.jl")
     Aqua.test_all(Strided; piracies = false)
 end
 
