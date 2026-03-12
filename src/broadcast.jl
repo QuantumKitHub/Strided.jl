@@ -30,13 +30,16 @@ Base.dotview(a::StridedView{<:Any, N}, I::Vararg{SliceIndex, N}) where {N} = get
         dest::StridedView{<:Any, N},
         bc::Broadcasted{StridedArrayStyle{N}}
     ) where {N}
+    dims = size(dest)
+    any(isequal(0), dims) && return dest
+
     # convert to map
 
     # flatten and only keep the StridedView arguments
     # promote StridedView to have same size, by giving artificial zero strides
-    stridedargs = promoteshape(size(dest), capturestridedargs(bc)...)
+    stridedargs = promoteshape(dims, capturestridedargs(bc)...)
     c = make_capture(bc)
-    _mapreduce_fuse!(c, nothing, nothing, size(dest), (dest, stridedargs...))
+    _mapreduce_fuse!(c, nothing, nothing, dims, (dest, stridedargs...))
     return dest
 end
 
