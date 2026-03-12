@@ -65,6 +65,14 @@ end
     end
 end
 
+@testset "broadcast with zero-length StridedView" begin
+    @testset for T in (Float32, Float64, ComplexF32, ComplexF64)
+        A1 = StridedView(zeros(T, (2, 0)))
+        A2 = StridedView(zeros(T, (2, 0)))
+        @test (A1 .+ A2) == StridedView(zeros(T, (2, 0)))
+    end
+end
+
 @testset "mapreduce with StridedView" begin
     @testset for T in (Float32, Float64, ComplexF32, ComplexF64)
         R1 = rand(T, (10, 10, 10, 10, 10, 10))
