@@ -32,7 +32,7 @@ end
         A = JLArray(rand(T, 4, 4))
         B = JLArray(zeros(T, 4, 4))
         copy!(adjoint(StridedView(B)), StridedView(A))
-        @test Array(B) ≈ conj(Array(A))
+        @test Array(B) ≈ adjoint(Array(A))
     end
 end
 
@@ -40,6 +40,7 @@ end
     for T in (Float32, Float64)
         A = JLArray(rand(T, 8, 6))
         result = sum(StridedView(A))
+        @test result isa T
         @test result ≈ sum(Array(A))
     end
 end

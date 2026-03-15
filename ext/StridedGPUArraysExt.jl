@@ -114,6 +114,33 @@ end
     @inbounds out[ParentIndex(out_parent)] = acc
 end
 
+# GPU-compatible _mapreduce: avoids scalar indexing (first(A), out[ParentIndex(1)])
+# that JLArrays/real GPUs prohibit. Uses zero(T) as a proxy to infer the output
+# element type without reading from the device.
+function Strided._mapreduce(
+        f, op, A::StridedView{T, N, <:AnyGPUArray{T}}, nt = nothing
+    ) where {T, N}
+    if length(A) == 0
+        b = Base.mapreduce_empty(f, op, T)
+        return nt === nothing ? b : op(b, nt.init)
+    end
+
+    dims = size(A)
+
+    if nt === nothing
+        a_zero = Base.mapreduce_first(f, op, zero(T))
+        out = similar(parent(A), typeof(a_zero), (1,))
+        Strided._init_reduction!(out, f, op, a_zero)
+    else
+        out = similar(parent(A), typeof(nt.init), (1,))
+        fill!(out, nt.init)
+    end
+
+    Strided._mapreducedim!(f, op, nothing, dims, (sreshape(StridedView(out), one.(dims)), A))
+
+    return Array(out)[1]
+end
+
 function Strided._mapreduce_fuse!(
         f, op, initop,
         dims::Dims{N},
