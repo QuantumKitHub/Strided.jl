@@ -12,6 +12,9 @@ is_buildkite = get(ENV, "BUILDKITE", "false") == "true"
 
 if !is_buildkite
     include("jlarrays.jl")
+    @testset "JLArray GPU mapreduce" begin
+        include("mapreduce_gpu.jl")
+    end
     println("Base.Threads.nthreads() =  $(Base.Threads.nthreads())")
 
     println("Running tests single-threaded:")
