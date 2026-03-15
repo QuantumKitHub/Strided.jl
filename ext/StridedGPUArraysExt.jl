@@ -7,10 +7,13 @@ using StridedViews: ParentIndex
 
 ALL_FS = Union{typeof(adjoint), typeof(conj), typeof(identity), typeof(transpose)}
 
-KernelAbstractions.get_backend(sv::StridedView{T, N, TA}) where {T, N, TA <: AnyGPUArray{T}} = KernelAbstractions.get_backend(parent(sv))
+# StridedView backed by any GPU array type, with element type linked to the parent.
+const GPUStridedView{T, N} = StridedView{T, N, <:AnyGPUArray{T}}
 
-function Base.Broadcast.BroadcastStyle(gpu_sv::StridedView{T, N, TA}) where {T, N, TA <: AnyGPUArray{T}}
-    raw_style = Base.Broadcast.BroadcastStyle(TA)
+KernelAbstractions.get_backend(sv::GPUStridedView) = KernelAbstractions.get_backend(parent(sv))
+
+function Base.Broadcast.BroadcastStyle(gpu_sv::GPUStridedView{T, N}) where {T, N}
+    raw_style = Base.Broadcast.BroadcastStyle(typeof(parent(gpu_sv)))
     return typeof(raw_style)(Val(N)) # sets the dimensionality correctly
 end
 
@@ -43,10 +46,10 @@ function Base.fill!(A::StridedView{T, N, TA, F}, x) where {T, N, TA <: AbstractG
     return A
 end
 
-function LinearAlgebra.mul!(
-        C::StridedView{TC, 2, <:AnyGPUArray{TC}},
-        A::StridedView{TA, 2, <:AnyGPUArray{TA}},
-        B::StridedView{TB, 2, <:AnyGPUArray{TB}},
+function Strided.__mul!(
+        C::GPUStridedView{TC, 2},
+        A::GPUStridedView{TA, 2},
+        B::GPUStridedView{TB, 2},
         α::Number, β::Number
     ) where {TC, TA, TB}
     return GPUArrays.generic_matmatmul!(C, A, B, α, β)
@@ -119,7 +122,7 @@ end
 # infer output type via Broadcast machinery, look up the neutral element (errors on
 # unknown ops), fill the output buffer, then read back a single scalar via Array().
 function Strided._mapreduce(
-        f, op, A::StridedView{T, N, <:AnyGPUArray{T}}, nt = nothing
+        f, op, A::GPUStridedView{T, N}, nt = nothing
     ) where {T, N}
     if length(A) == 0
         b = Base.mapreduce_empty(f, op, T)
@@ -150,7 +153,7 @@ end
 function Strided._mapreduce_fuse!(
         f, op, initop,
         dims::Dims{N},
-        arrays::Tuple{StridedView{TO, N, <:AnyGPUArray{TO}}, Vararg{StridedView{<:Any, N, <:AnyGPUArray}}}
+        arrays::Tuple{GPUStridedView{TO, N}, Vararg{GPUStridedView{<:Any, N}}}
     ) where {TO, N}
 
     out = arrays[1]
