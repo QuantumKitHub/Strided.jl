@@ -9,9 +9,8 @@ TupleTools = "9d95972d-f1c8-5527-a6e0-b4b365fa01f6"
 
 [weakdeps]
 AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
-JLArrays = "27aeb0d3-9eb9-45fb-866b-73c2ecf80fcb"
-GPUArrays = "0c68f7d7-f131-5f86-a1c3-88cf8149b2d7"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+GPUArrays = "0c68f7d7-f131-5f86-a1c3-88cf8149b2d7"
 JLArrays = "27aeb0d3-9eb9-45fb-866b-73c2ecf80fcb"
 PtrArrays = "43287f4e-b6f4-7ad1-bb20-aadabca52c3d"
 
