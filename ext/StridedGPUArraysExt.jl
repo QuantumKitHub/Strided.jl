@@ -150,7 +150,7 @@ end
 function Strided._mapreduce_fuse!(
         f, op, initop,
         dims::Dims{N},
-        arrays::Tuple{StridedView{TO, N, <:AnyGPUArray{TO}}, Vararg{StridedView}}
+        arrays::Tuple{StridedView{TO, N, <:AnyGPUArray{TO}}, Vararg{StridedView{<:Any, N, <:AnyGPUArray}}}
     ) where {TO, N}
 
     out = arrays[1]

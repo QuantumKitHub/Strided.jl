@@ -47,6 +47,16 @@ end
 
 # ---- nontrivial strides and offsets ----
 
+@testset "GPU dispatch requires all inputs on GPU" begin
+    # With a CPU input the GPU _mapreduce_fuse! must not be dispatched.
+    # The CPU fallback fires instead; since the output is GPU-backed it hits
+    # JLArrays' scalar-indexing guard — confirming the GPU path was bypassed.
+    A_gpu = JLArray(rand(Float32, 4, 4))
+    A_cpu = Array(A_gpu)
+    B_gpu = JLArray(zeros(Float32, 4, 4))
+    @test_throws Exception map!(+, StridedView(B_gpu), StridedView(A_gpu), StridedView(A_cpu))
+end
+
 @testset "GPU map! — stride-2 input (every other row)" begin
     for T in (Float32, Float64, ComplexF32, ComplexF64)
         A = JLArray(rand(T, 8, 6))
