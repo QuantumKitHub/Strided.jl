@@ -115,8 +115,9 @@ end
 end
 
 # GPU-compatible _mapreduce: avoids scalar indexing (first(A), out[ParentIndex(1)])
-# that JLArrays/real GPUs prohibit. Uses zero(T) as a proxy to infer the output
-# element type without reading from the device.
+# that JLArrays/real GPUs prohibit. Mirrors GPUArrays' neutral_element approach:
+# infer output type via Broadcast machinery, look up the neutral element (errors on
+# unknown ops), fill the output buffer, then read back a single scalar via Array().
 function Strided._mapreduce(
         f, op, A::StridedView{T, N, <:AnyGPUArray{T}}, nt = nothing
     ) where {T, N}
@@ -128,13 +129,18 @@ function Strided._mapreduce(
     dims = size(A)
 
     if nt === nothing
-        a_zero = Base.mapreduce_first(f, op, zero(T))
-        out = similar(parent(A), typeof(a_zero), (1,))
-        Strided._init_reduction!(out, f, op, a_zero)
+        ET = Base.Broadcast.combine_eltypes(f, (A,))
+        ET = Base.promote_op(op, ET, ET)
+        (ET === Union{} || ET === Any) &&
+            error("cannot infer output element type for mapreduce; pass an explicit `init`")
+        init = GPUArrays.neutral_element(op, ET)
     else
-        out = similar(parent(A), typeof(nt.init), (1,))
-        fill!(out, nt.init)
+        ET = typeof(nt.init)
+        init = nt.init
     end
+
+    out = similar(parent(A), ET, (1,))
+    fill!(out, init)
 
     Strided._mapreducedim!(f, op, nothing, dims, (sreshape(StridedView(out), one.(dims)), A))
 
