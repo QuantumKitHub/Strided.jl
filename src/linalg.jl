@@ -2,6 +2,13 @@
 LinearAlgebra.rmul!(dst::StridedView, α::Number) = mul!(dst, dst, α)
 LinearAlgebra.lmul!(α::Number, dst::StridedView) = mul!(dst, α, dst)
 
+LinearAlgebra.adjoint!(C::StridedView, A::StridedView) = copy!(C, adjoint(A))
+LinearAlgebra.transpose!(C::StridedView, A::StridedView) = copy!(C, transpose(A))
+function Base.permutedims!(C::StridedView{T, N}, A::StridedView{T, N}, perm) where {T, N}
+    copy!(C, permutedims(A, perm))
+    return C
+end
+
 function LinearAlgebra.mul!(
         dst::StridedView{<:Number, N}, α::Number,
         src::StridedView{<:Number, N}
