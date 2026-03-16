@@ -1,12 +1,11 @@
 # Methods based on map!
-function Base.copy!(dst::StridedView{<:Any, N}, src::StridedView{<:Any, N}) where {N}
-    return map!(identity, dst, src)
-end
+Base.copy!(dst::StridedView{<:Any, N}, src::StridedView{<:Any, N}) where {N} = map!(identity, dst, src)
 Base.conj!(a::StridedView{<:Real}) = a
 Base.conj!(a::StridedView) = map!(conj, a, a)
 LinearAlgebra.adjoint!(dst::StridedView, src::StridedView) = copy!(dst, adjoint(src))
 LinearAlgebra.transpose!(C::StridedView, A::StridedView) = copy!(C, transpose(A))
 Base.permutedims!(dst::StridedView, src::StridedView, p) = copy!(dst, permutedims(src, p))
+Base.fill!(A::StridedView, val) = map!(Returns(val), A)
 
 function Base.mapreduce(f, op, A::StridedView; dims = :, kw...)
     return Base._mapreduce_dim(f, op, values(kw), A, dims)

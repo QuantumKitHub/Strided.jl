@@ -32,20 +32,6 @@ function Base.Array(a::GPUStridedView{T, N}) where {T, N}
     return Array(b)
 end
 
-# lifted from GPUArrays.jl
-function Base.fill!(A::StridedView{T, N, TA, F}, x) where {T, N, TA <: AbstractGPUArray{T}, F <: ALL_FS}
-    isempty(A) && return A
-    @kernel function fill_kernel!(a, val)
-        idx = @index(Global, Cartesian)
-        @inbounds a[idx] = val
-    end
-    # ndims check for 0D support
-    kernel = fill_kernel!(KernelAbstractions.get_backend(A))
-    f_x = F <: Union{typeof(conj), typeof(adjoint)} ? conj(x) : x
-    kernel(A, f_x; ndrange = size(A))
-    return A
-end
-
 function Strided.__mul!(
         C::GPUStridedView{TC, 2},
         A::GPUStridedView{TA, 2},
