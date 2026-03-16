@@ -24,12 +24,12 @@ function Base.copy!(dst::AbstractArray{TD, ND}, src::StridedView{TS, NS, TAS, FS
     return dst
 end
 
-function Base.copyto!(dest::StridedView{T, N, <:AnyGPUArray{T}}, bc::Base.Broadcast.Broadcasted{Strided.StridedArrayStyle{N}}) where {T <: Number, N}
-    dims = size(dest)
-    any(isequal(0), dims) && return dest
-
-    GPUArrays._copyto!(dest, bc)
-    return dest
+# Conversion to CPU Array: materialise into a contiguous GPU array first (so the
+# GPU-to-GPU copy! path is used), then let the GPU array type handle the transfer.
+function Base.Array(a::GPUStridedView{T, N}) where {T, N}
+    b = similar(parent(a), T, size(a))
+    copy!(StridedView(b), a)
+    return Array(b)
 end
 
 # lifted from GPUArrays.jl
