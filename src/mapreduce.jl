@@ -4,18 +4,9 @@ function Base.copy!(dst::StridedView{<:Any, N}, src::StridedView{<:Any, N}) wher
 end
 Base.conj!(a::StridedView{<:Real}) = a
 Base.conj!(a::StridedView) = map!(conj, a, a)
-function LinearAlgebra.adjoint!(
-        dst::StridedView{<:Any, N},
-        src::StridedView{<:Any, N}
-    ) where {N}
-    return copy!(dst, adjoint(src))
-end
-function Base.permutedims!(
-        dst::StridedView{<:Any, N}, src::StridedView{<:Any, N},
-        p
-    ) where {N}
-    return copy!(dst, permutedims(src, p))
-end
+LinearAlgebra.adjoint!(dst::StridedView, src::StridedView) = copy!(dst, adjoint(src))
+LinearAlgebra.transpose!(C::StridedView, A::StridedView) = copy!(C, transpose(A))
+Base.permutedims!(dst::StridedView, src::StridedView, p) = copy!(dst, permutedims(src, p))
 
 function Base.mapreduce(f, op, A::StridedView; dims = :, kw...)
     return Base._mapreduce_dim(f, op, values(kw), A, dims)
