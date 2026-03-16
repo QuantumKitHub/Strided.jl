@@ -12,8 +12,8 @@ is_buildkite = get(ENV, "BUILDKITE", "false") == "true"
 
 if !is_buildkite
     include("jlarrays.jl")
-    @testset "JLArray GPU mapreduce" begin
-        include("mapreduce_gpu.jl")
+    @testset "mapreduce tests" begin
+        include("mapreduce_tests.jl")
     end
     println("Base.Threads.nthreads() =  $(Base.Threads.nthreads())")
 
