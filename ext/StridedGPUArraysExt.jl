@@ -12,22 +12,10 @@ const GPUStridedView{T, N} = StridedView{T, N, <:AnyGPUArray{T}}
 
 KernelAbstractions.get_backend(sv::GPUStridedView) = KernelAbstractions.get_backend(parent(sv))
 
-function Base.Broadcast.BroadcastStyle(gpu_sv::GPUStridedView{T, N}) where {T, N}
-    raw_style = Base.Broadcast.BroadcastStyle(typeof(parent(gpu_sv)))
-    return typeof(raw_style)(Val(N)) # sets the dimensionality correctly
-end
-
-function Base.copy!(dst::AbstractArray{TD, ND}, src::StridedView{TS, NS, TAS, FS}) where {TD <: Number, ND, TS <: Number, NS, TAS <: AbstractGPUArray{TS}, FS <: ALL_FS}
-    bc_style = Base.Broadcast.BroadcastStyle(TAS)
-    bc = Base.Broadcast.Broadcasted(bc_style, identity, (src,), axes(dst))
-    GPUArrays._copyto!(dst, bc)
-    return dst
-end
-
 # Conversion to CPU Array: materialise into a contiguous GPU array first (so the
 # GPU-to-GPU copy! path is used), then let the GPU array type handle the transfer.
-function Base.Array(a::GPUStridedView{T, N}) where {T, N}
-    b = similar(parent(a), T, size(a))
+function Base.Array(a::GPUStridedView)
+    b = similar(parent(a), eltype(a), size(a))
     copy!(StridedView(b), a)
     return Array(b)
 end
