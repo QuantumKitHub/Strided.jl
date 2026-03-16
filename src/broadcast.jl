@@ -20,8 +20,21 @@ function Broadcast.BroadcastStyle(
 end
 
 function Base.similar(bc::Broadcasted{<:StridedArrayStyle{N}}, ::Type{T}) where {N, T}
-    return StridedView(similar(convert(Broadcasted{DefaultArrayStyle{N}}, bc), T))
+    sv = _find_strided_view(bc)
+    if sv !== nothing
+        return StridedView(similar(parent(sv), T, size(bc)))
+    end
+    return StridedView(similar(Array{T}, axes(bc)))
 end
+
+@inline _find_strided_view(bc::Broadcasted) = _find_strided_view(bc.args...)
+@inline _find_strided_view(sv::StridedView, rest...) = sv
+@inline function _find_strided_view(nested::Broadcasted, rest...)
+    sv = _find_strided_view(nested)
+    sv === nothing ? _find_strided_view(rest...) : sv
+end
+@inline _find_strided_view(x, rest...) = _find_strided_view(rest...)
+@inline _find_strided_view() = nothing
 
 Base.dotview(a::StridedView{<:Any, N}, I::Vararg{SliceIndex, N}) where {N} = getindex(a, I...)
 
