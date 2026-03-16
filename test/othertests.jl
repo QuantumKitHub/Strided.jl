@@ -115,55 +115,65 @@ end
                 mapreduce(sin, +, R1_cpu; dims = (1, 3, 5))
 
             R2c = copy(R2)
-            @test Array(Strided._mapreducedim!(
-                sin, +, identity, (10, 10, 10, 10, 10, 10),
-                (
-                    sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)),
-                    StridedView(R1),
+            @test Array(
+                Strided._mapreducedim!(
+                    sin, +, identity, (10, 10, 10, 10, 10, 10),
+                    (
+                        sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)),
+                        StridedView(R1),
+                    )
                 )
-            )) ≈
+            ) ≈
                 mapreduce(sin, +, R1_cpu; dims = (2, 3, 6)) .+ reshape(R2_cpu, (10, 1, 1, 10, 10, 1))
 
             R2c = copy(R2)
-            @test Array(Strided._mapreducedim!(
-                sin, +, x -> 0, (10, 10, 10, 10, 10, 10),
-                (
-                    sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)),
-                    StridedView(R1),
+            @test Array(
+                Strided._mapreducedim!(
+                    sin, +, x -> 0, (10, 10, 10, 10, 10, 10),
+                    (
+                        sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)),
+                        StridedView(R1),
+                    )
                 )
-            )) ≈
+            ) ≈
                 mapreduce(sin, +, R1_cpu; dims = (2, 3, 6))
 
             R2c = copy(R2)
             β = rand(T)
-            @test Array(Strided._mapreducedim!(
-                sin, +, x -> β * x, (10, 10, 10, 10, 10, 10),
-                (
-                    sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)),
-                    StridedView(R1),
+            @test Array(
+                Strided._mapreducedim!(
+                    sin, +, x -> β * x, (10, 10, 10, 10, 10, 10),
+                    (
+                        sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)),
+                        StridedView(R1),
+                    )
                 )
-            )) ≈
+            ) ≈
                 mapreduce(sin, +, R1_cpu; dims = (2, 3, 6)) .+
                 β .* reshape(R2_cpu, (10, 1, 1, 10, 10, 1))
 
             R2c = copy(R2)
-            @test Array(Strided._mapreducedim!(
-                sin, +, x -> β, (10, 10, 10, 10, 10, 10),
-                (
-                    sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)),
-                    StridedView(R1),
+            @test Array(
+                Strided._mapreducedim!(
+                    sin, +, x -> β, (10, 10, 10, 10, 10, 10),
+                    (
+                        sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)),
+                        StridedView(R1),
+                    )
                 )
-            )) ≈
+            ) ≈
                 mapreduce(sin, +, R1_cpu; dims = (2, 3, 6), init = β)
 
             R2c = copy(R2)
-            @test Array(Strided._mapreducedim!(
-                sin, +, conj, (10, 10, 10, 10, 10, 10),
-                (
-                    sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)),
-                    StridedView(R1),
+            @test Array(
+                Strided._mapreducedim!(
+                    sin, +, conj, (10, 10, 10, 10, 10, 10),
+                    (
+                        sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)),
+                        StridedView(R1),
+                    )
                 )
-            )) ≈
+            ) ≈
                 mapreduce(sin, +, R1_cpu; dims = (2, 3, 6)) .+
                 conj.(reshape(R2_cpu, (10, 1, 1, 10, 10, 1)))
 

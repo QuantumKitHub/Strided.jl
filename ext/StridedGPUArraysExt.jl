@@ -99,17 +99,21 @@ end
     # Sequential reduction loop over reduction subspace
     @inbounds for red_linear in Base.OneTo(prod(red_sizes))
         red_cidx = CartesianIndices(red_sizes)[red_linear]
-        complete_cidx = CartesianIndex(ntuple(Val(N)) do d
-            @inbounds nred_cidx[d] + red_cidx[d] - 1
-        end)
-
-        val = f(ntuple(Val(length(inputs))) do m
-            @inbounds begin
-                a = inputs[m]
-                ip = a.offset + 1 + _strides_dot(a.strides, complete_cidx)
-                a[ParentIndex(ip)]
+        complete_cidx = CartesianIndex(
+            ntuple(Val(N)) do d
+                @inbounds nred_cidx[d] + red_cidx[d] - 1
             end
-        end...)
+        )
+
+        val = f(
+            ntuple(Val(length(inputs))) do m
+                @inbounds begin
+                    a = inputs[m]
+                    ip = a.offset + 1 + _strides_dot(a.strides, complete_cidx)
+                    a[ParentIndex(ip)]
+                end
+            end...
+        )
 
         acc = _gpu_accum(op, acc, val)
     end
@@ -162,9 +166,11 @@ function Strided._mapreduce_fuse!(
     inputs = ntuple(i -> inputs_raw[i], Val(M))
 
     # Number of output elements = product of non-reduction dims
-    out_total = prod(ntuple(Val(N)) do d
-        @inbounds iszero(out.strides[d]) ? 1 : dims[d]
-    end)
+    out_total = prod(
+        ntuple(Val(N)) do d
+            @inbounds iszero(out.strides[d]) ? 1 : dims[d]
+        end
+    )
 
     backend = KernelAbstractions.get_backend(parent(out))
     kernel! = _mapreduce_gpu_kernel!(backend)

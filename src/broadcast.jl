@@ -31,7 +31,7 @@ end
 @inline _find_strided_view(sv::StridedView, rest...) = sv
 @inline function _find_strided_view(nested::Broadcasted, rest...)
     sv = _find_strided_view(nested)
-    sv === nothing ? _find_strided_view(rest...) : sv
+    return sv === nothing ? _find_strided_view(rest...) : sv
 end
 @inline _find_strided_view(x, rest...) = _find_strided_view(rest...)
 @inline _find_strided_view() = nothing
