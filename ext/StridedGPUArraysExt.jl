@@ -38,19 +38,21 @@ end
 @kernel function linear_copy_kernel!(dest, dstart, src, sstart, n)
     i = @index(Global, Linear)
     if i <= n
-        @inbounds dest[dstart+i-1] = src[sstart+i-1]
+        @inbounds dest[dstart + i - 1] = src[sstart + i - 1]
     end
 end
 
-function Base.copyto!(dest::StridedView{TD, ND, TAD, FD}, dstart::Integer,
-                      src::StridedView{TS, NS, TAS, FS}, sstart::Integer, n::Integer) where {TD, TS, ND, NS, TAD <: AbstractGPUArray{TD}, TAS <: AbstractGPUArray{TS}, FD, FS}
+function Base.copyto!(
+        dest::StridedView{TD, ND, TAD, FD}, dstart::Integer,
+        src::StridedView{TS, NS, TAS, FS}, sstart::Integer, n::Integer
+    ) where {TD, TS, ND, NS, TAD <: AbstractGPUArray{TD}, TAS <: AbstractGPUArray{TS}, FD, FS}
     n == 0 && return dest
     n < 0 && throw(ArgumentError(string("tried to copy n=", n, " elements, but n should be nonnegative")))
     destinds, srcinds = LinearIndices(dest), LinearIndices(src)
-    (checkbounds(Bool, destinds, dstart) && checkbounds(Bool, destinds, dstart+n-1)) || throw(BoundsError(dest, dstart:dstart+n-1))
-    (checkbounds(Bool, srcinds, sstart)  && checkbounds(Bool, srcinds, sstart+n-1))  || throw(BoundsError(src,  sstart:sstart+n-1))
+    (checkbounds(Bool, destinds, dstart) && checkbounds(Bool, destinds, dstart + n - 1)) || throw(BoundsError(dest, dstart:(dstart + n - 1)))
+    (checkbounds(Bool, srcinds, sstart)  && checkbounds(Bool, srcinds, sstart + n - 1))  || throw(BoundsError(src, sstart:(sstart + n - 1)))
     kernel = linear_copy_kernel!(KernelAbstractions.get_backend(dest))
-    kernel(dest, dstart, src, sstart, n; ndrange=n)
+    kernel(dest, dstart, src, sstart, n; ndrange = n)
     return dest
 end
 Base.copyto!(dest::StridedView{TD, ND, TAD, FD}, src::StridedView{TS, NS, TAS, FS}) where {TD, TS, ND, NS, TAD <: AbstractGPUArray{TD}, TAS <: AbstractGPUArray{TS}, FD, FS} = copyto!(dest, 1, src, 1, length(src))
