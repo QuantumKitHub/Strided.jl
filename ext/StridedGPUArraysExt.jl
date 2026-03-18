@@ -20,6 +20,14 @@ function Base.copy!(dst::AbstractArray{TD, ND}, src::StridedView{TS, NS, TAS, FS
     return dst
 end
 
+function Base.copyto!(dest::StridedView{T, N, <:AnyGPUArray{T}}, bc::Base.Broadcast.Broadcasted{Strided.StridedArrayStyle{N}}) where {T <: Number, N}
+    dims = size(dest)
+    any(isequal(0), dims) && return dest
+
+    GPUArrays._copyto!(dest, bc)
+    return dest
+end
+
 # lifted from GPUArrays.jl
 function Base.fill!(A::StridedView{T, N, TA, F}, x) where {T, N, TA <: AbstractGPUArray{T}, F <: ALL_FS}
     isempty(A) && return A
