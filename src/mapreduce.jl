@@ -51,7 +51,7 @@ function Base.map!(
 end
 
 function _mapreduce(f, op, A::StridedView{T}, nt = nothing) where {T}
-    if length(A) == 0
+    if isempty(A)
         b = Base.mapreduce_empty(f, op, T)
         return nt === nothing ? b : op(b, nt.init)
     end
@@ -215,7 +215,7 @@ function _mapreduce_threaded!(
         _mapreduce_kernel!(f, op, initop, dims, blocks, arrays, strides, spacedoffsets)
     else
         i = _lastargmax((dims .- 1) .* costs)
-        if costs[i] == 0 || dims[i] <= min(blocks[i], 1024)
+        if iszero(costs[i]) || dims[i] <= min(blocks[i], 1024)
             offset1 = offsets[1] + spacing * (taskindex - 1)
             spacedoffsets = (offset1, Base.tail(offsets)...)
             _mapreduce_kernel!(f, op, initop, dims, blocks, arrays, strides, spacedoffsets)
@@ -337,7 +337,7 @@ end
     i = 1
     if N >= 1
         ex = quote
-            if $(stridevars[1, 1]) == 0 # explicitly hoist A1[I1] out of loop
+            if iszero($(stridevars[1, 1])) # explicitly hoist A1[I1] out of loop
                 a = $lhsex
                 @simd for $(innerloopvars[i]) in Base.OneTo($(blockdimvars[i]))
                     $exa
@@ -374,7 +374,7 @@ end
         if N >= 1
             initex = quote
                 $(initblockdimvars[i]) = ifelse(
-                    $(stridevars[i, 1]) == 0, 1,
+                    iszero($(stridevars[i, 1])), 1,
                     $(blockdimvars[i])
                 )
                 @simd for $(innerloopvars[i]) in Base.OneTo($(initblockdimvars[i]))
@@ -387,7 +387,7 @@ end
         for outer i in 2:N
             initex = quote
                 $(initblockdimvars[i]) = ifelse(
-                    $(stridevars[i, 1]) == 0, 1,
+                    iszero($(stridevars[i, 1])), 1,
                     $(blockdimvars[i])
                 )
                 for $(innerloopvars[i]) in Base.OneTo($(initblockdimvars[i]))
@@ -453,10 +453,10 @@ function indexorder(strides::NTuple{N, Int}) where {N}
     # counting zero strides zero strides have order 1
     return ntuple(Val(N)) do i
         si = abs(strides[i])
-        si == 0 && return 1
+        iszero(si) && return 1
         k = 1
         for s in strides
-            if s != 0 && abs(s) < si
+            if !iszero(s) && abs(s) < si
                 k += 1
             end
         end

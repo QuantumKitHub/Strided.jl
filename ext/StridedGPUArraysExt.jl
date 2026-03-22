@@ -37,7 +37,7 @@ end
 @inline _gpu_accum(::Nothing, acc, val) = val
 @inline _gpu_accum(op, acc, val) = op(acc, val)
 
-@inline function _strides_dot(strides::NTuple{N, Int}, cidx::CartesianIndex{N}) where {N}
+@inline function cartesian2parent(strides::NTuple{N, Int}, cidx::CartesianIndex{N}) where {N}
     s = 0
     for d in Base.OneTo(N)
         @inbounds s += strides[d] * (cidx[d] - 1)
@@ -47,52 +47,33 @@ end
 
 @kernel function _mapreduce_gpu_kernel!(
         f, op, initop,
-        dims::NTuple{N, Int},
-        out::OT,
-        inputs::IT
-    ) where {N, OT <: StridedView, IT <: Tuple}
+        dims_red, strides, offsets,
+        arrays
+    )
 
-    out_linear = @index(Global, Linear)
+    I_out = @index(Global, Cartesian)
 
-    # Non-reduction subspace sizes (1 for reduction dims)
-    nred_sizes = ntuple(Val(N)) do d
-        @inbounds iszero(out.strides[d]) ? 1 : dims[d]
-    end
-    # Reduction subspace sizes (1 for non-reduction dims)
-    red_sizes = ntuple(Val(N)) do d
-        @inbounds iszero(out.strides[d]) ? dims[d] : 1
-    end
-
-    # Map out_linear → cartesian in non-reduction subspace
-    nred_cidx = CartesianIndices(nred_sizes)[out_linear]
-    out_parent = out.offset + 1 + _strides_dot(out.strides, nred_cidx)
+    # Compute parent index for current index.
+    Is_parent = cartesian2parent.(strides, Ref(I_out)) .+ offsets .+ 1
 
     # Initialize accumulator from current output value (or apply initop)
-    @inbounds acc = _gpu_init_acc(initop, out[ParentIndex(out_parent)])
+    out = arrays[1]
+    out_I_parent = Is_parent[1]
+    @inbounds acc = _gpu_init_acc(initop, out[ParentIndex(out_I_parent)])
 
-    # Sequential reduction loop over reduction subspace
-    @inbounds for red_linear in Base.OneTo(prod(red_sizes))
-        red_cidx = CartesianIndices(red_sizes)[red_linear]
-        complete_cidx = CartesianIndex(
-            ntuple(Val(N)) do d
-                @inbounds nred_cidx[d] + red_cidx[d] - 1
-            end
-        )
+    inputs = Base.tail(arrays)
+    inputs_I_parent = Base.tail(Is_parent)
+    inputs_strides = Base.tail(strides)
 
-        val = f(
-            ntuple(Val(length(inputs))) do m
-                @inbounds begin
-                    a = inputs[m]
-                    ip = a.offset + 1 + _strides_dot(a.strides, complete_cidx)
-                    a[ParentIndex(ip)]
-                end
-            end...
-        )
-
-        acc = _gpu_accum(op, acc, val)
+    for I_red in CartesianIndices(dims_red)
+        # Compute parent index for current reduction index
+        Is_red_parent = cartesian2parent.(inputs_strides, Ref(I_red))
+        # Get values from each input array, apply map function, and accumulate
+        vals = getindex.(inputs, ParentIndex.(inputs_I_parent .+ Is_red_parent))
+        acc = _gpu_accum(op, acc, f(vals...))
     end
-
-    @inbounds out[ParentIndex(out_parent)] = acc
+    # Write back result to output array
+    @inbounds out[ParentIndex(out_I_parent)] = acc
 end
 
 # GPU-compatible _mapreduce: avoids scalar indexing (first(A), out[ParentIndex(1)])
@@ -102,7 +83,7 @@ end
 function Strided._mapreduce(
         f, op, A::GPUStridedView{T, N}, nt = nothing
     ) where {T, N}
-    if length(A) == 0
+    if isempty(A)
         b = Base.mapreduce_empty(f, op, T)
         return nt === nothing ? b : op(b, nt.init)
     end
@@ -128,27 +109,27 @@ function Strided._mapreduce(
     return Array(out)[1]
 end
 
-function Strided._mapreduce_fuse!(
+function Strided._mapreduce_block!(
         f, op, initop,
         dims::Dims{N},
+        strides, offsets, costs,
         arrays::Tuple{GPUStridedView{TO, N}, Vararg{GPUStridedView{<:Any, N}}}
     ) where {TO, N}
 
     out = arrays[1]
-    inputs_raw = Base.tail(arrays)
-    M = length(inputs_raw)
-    inputs = ntuple(i -> inputs_raw[i], Val(M))
+    out_strides = strides[1]
 
     # Number of output elements = product of non-reduction dims
-    out_total = prod(
-        ntuple(Val(N)) do d
-            @inbounds iszero(out.strides[d]) ? 1 : dims[d]
-        end
-    )
+    dims_out = ntuple(Val(N)) do d
+        @inbounds iszero(out_strides[d]) ? 1 : dims[d]
+    end
+    dims_red = ntuple(Val(N)) do d
+        @inbounds iszero(out_strides[d]) ? dims[d] : 1
+    end
 
     backend = KernelAbstractions.get_backend(parent(out))
     kernel! = _mapreduce_gpu_kernel!(backend)
-    kernel!(f, op, initop, dims, out, inputs; ndrange = out_total)
+    kernel!(f, op, initop, dims_red, strides, offsets, arrays; ndrange = dims_out)
 
     return nothing
 end
