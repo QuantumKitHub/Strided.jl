@@ -11,13 +11,17 @@ backends = [("Array", identity), ("JLArray", JLArray)]
             B1 = StridedView(make_arr(copy(data1)))
             B2 = StridedView(make_arr(copy(data2)))
 
-            conj!(A1);                        conj!(B1)
+            conj!(A1)
+            conj!(B1)
             @test A1 ≈ Array(B1)
-            adjoint!(A2, A1);                 adjoint!(B2, B1)
+            adjoint!(A2, A1)
+            adjoint!(B2, B1)
             @test A2 ≈ Array(B2)
-            transpose!(A2, A1);               transpose!(B2, B1)
+            transpose!(A2, A1)
+            transpose!(B2, B1)
             @test A2 ≈ Array(B2)
-            permutedims!(A2, A1, (2, 1));     permutedims!(B2, B1, (2, 1))
+            permutedims!(A2, A1, (2, 1))
+            permutedims!(B2, B1, (2, 1))
             @test A2 ≈ Array(B2)
         end
     end
@@ -118,64 +122,42 @@ end
             @test Array(
                 Strided._mapreducedim!(
                     sin, +, identity, (10, 10, 10, 10, 10, 10),
-                    (
-                        sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)),
-                        StridedView(R1),
-                    )
+                    (sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)), StridedView(R1))
                 )
-            ) ≈
-                mapreduce(sin, +, R1_cpu; dims = (2, 3, 6)) .+ reshape(R2_cpu, (10, 1, 1, 10, 10, 1))
+            ) ≈ mapreduce(sin, +, R1_cpu; dims = (2, 3, 6)) .+ reshape(R2_cpu, (10, 1, 1, 10, 10, 1))
 
             R2c = copy(R2)
             @test Array(
                 Strided._mapreducedim!(
                     sin, +, x -> 0, (10, 10, 10, 10, 10, 10),
-                    (
-                        sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)),
-                        StridedView(R1),
-                    )
+                    (sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)), StridedView(R1))
                 )
-            ) ≈
-                mapreduce(sin, +, R1_cpu; dims = (2, 3, 6))
+            ) ≈ mapreduce(sin, +, R1_cpu; dims = (2, 3, 6))
 
             R2c = copy(R2)
             β = rand(T)
             @test Array(
                 Strided._mapreducedim!(
                     sin, +, x -> β * x, (10, 10, 10, 10, 10, 10),
-                    (
-                        sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)),
-                        StridedView(R1),
-                    )
+                    (sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)), StridedView(R1))
                 )
-            ) ≈
-                mapreduce(sin, +, R1_cpu; dims = (2, 3, 6)) .+
-                β .* reshape(R2_cpu, (10, 1, 1, 10, 10, 1))
+            ) ≈ mapreduce(sin, +, R1_cpu; dims = (2, 3, 6)) .+ β .* reshape(R2_cpu, (10, 1, 1, 10, 10, 1))
 
             R2c = copy(R2)
             @test Array(
                 Strided._mapreducedim!(
                     sin, +, x -> β, (10, 10, 10, 10, 10, 10),
-                    (
-                        sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)),
-                        StridedView(R1),
-                    )
+                    (sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)), StridedView(R1))
                 )
-            ) ≈
-                mapreduce(sin, +, R1_cpu; dims = (2, 3, 6), init = β)
+            ) ≈ mapreduce(sin, +, R1_cpu; dims = (2, 3, 6), init = β)
 
             R2c = copy(R2)
             @test Array(
                 Strided._mapreducedim!(
                     sin, +, conj, (10, 10, 10, 10, 10, 10),
-                    (
-                        sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)),
-                        StridedView(R1),
-                    )
+                    (sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)), StridedView(R1))
                 )
-            ) ≈
-                mapreduce(sin, +, R1_cpu; dims = (2, 3, 6)) .+
-                conj.(reshape(R2_cpu, (10, 1, 1, 10, 10, 1)))
+            ) ≈ mapreduce(sin, +, R1_cpu; dims = (2, 3, 6)) .+ conj.(reshape(R2_cpu, (10, 1, 1, 10, 10, 1)))
 
             R3_cpu = rand(T, (100, 100, 2))
             R3 = make_arr(copy(R3_cpu))
