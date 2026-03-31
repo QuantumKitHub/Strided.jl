@@ -1,3 +1,8 @@
+using Test
+using Strided
+using CUDA: CuMatrix
+using CUDA.Adapt: adapt
+
 for T in (Float32, Float64, Complex{Float32}, Complex{Float64})
     @testset "Copy with CuStridedView: $T, $f1, $f2" for f2 in (identity, conj, adjoint, transpose), f1 in (identity, conj, transpose, adjoint)
         for m1 in (0, 16, 32), m2 in (0, 16, 32)
