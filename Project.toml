@@ -9,16 +9,10 @@ StridedViews = "4db3bf67-4bd7-4b4e-b153-31dc3fb37143"
 TupleTools = "9d95972d-f1c8-5527-a6e0-b4b365fa01f6"
 
 [weakdeps]
-AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
-JLArrays = "27aeb0d3-9eb9-45fb-866b-73c2ecf80fcb"
 GPUArrays = "0c68f7d7-f131-5f86-a1c3-88cf8149b2d7"
-CUDACore = "bd0ed864-bdfe-4181-a5ed-ce625a5fdea2"
 
 [extensions]
-StridedAMDGPUExt = "AMDGPU"
-StridedJLArraysExt = "JLArrays"
 StridedGPUArraysExt = "GPUArrays"
-StridedCUDACoreExt = "CUDACore"
 
 [compat]
 AMDGPU = "2"
