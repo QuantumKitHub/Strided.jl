@@ -12,6 +12,9 @@
             axes(f1(A1)) == axes(f2(A2)) || continue
             @test collect(Matrix(copy!(f2(A2), f1(A1)))) == JLArrays.Adapt.adapt(Vector{T}, copy!(B2, B1))
             @test copy!(zA1, f1(A1)) == copy!(zA2, B1)
+            B1 .= 2 .* B1 .- B1 ./ 3 # test copyto! of Broadcasted
+            A1 .= 2 .* A1 .- A1 ./ 3 # test copyto! of Broadcasted
+            @test JLArrays.Adapt.adapt(Vector{T}, f1(A1)) == JLArrays.Adapt.adapt(Vector{T}, B1)
             x = rand(T)
             @test f1(StridedView(JLArrays.Adapt.adapt(Vector{T}, fill!(A1c, x)))) == JLArrays.Adapt.adapt(Vector{T}, fill!(B1, x))
         end
