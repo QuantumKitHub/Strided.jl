@@ -23,7 +23,7 @@ StridedCUDAExt = "CUDA"
 [compat]
 AMDGPU = "2"
 Aqua = "0.8"
-CUDA = "5"
+CUDA = "5, 6.0"
 JLArrays = "0.3.1"
 GPUArrays = "11.4.1"
 LinearAlgebra = "1.6"
