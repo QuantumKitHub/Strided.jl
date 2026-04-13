@@ -1,6 +1,6 @@
 name = "Strided"
 uuid = "5e0ebb24-38b0-5f93-81fe-25c709ecae67"
-version = "2.3.5"
+version = "2.3.6"
 authors = ["Lukas Devos <lukas.devos@ugent.be>", "Maarten Van Damme <maartenvd1994@gmail.com>", "Jutho Haegeman <jutho.haegeman@ugent.be>"]
 
 [deps]
