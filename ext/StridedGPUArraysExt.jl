@@ -20,15 +20,6 @@ function Base.Array(a::GPUStridedView)
     return Array(b)
 end
 
-function Strided.__mul!(
-        C::GPUStridedView{TC, 2},
-        A::GPUStridedView{TA, 2},
-        B::GPUStridedView{TB, 2},
-        α::Number, β::Number
-    ) where {TC, TA, TB}
-    return GPUArrays.generic_matmatmul!(C, A, B, α, β)
-end
-
 # ---------- GPU mapreduce support ----------
 
 @inline _gpu_init_acc(::Nothing, current_val) = current_val

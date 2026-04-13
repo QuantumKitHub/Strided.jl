@@ -72,13 +72,25 @@ function LinearAlgebra.mul!(
     return C
 end
 
-function isblasmatrix(A::StridedView{T, 2}) where {T <: LinearAlgebra.BlasFloat}
+isblasmatrix(A::StridedView{T, 2}) where {T} = false
+function isblasmatrix(A::StridedView{T, 2, <:Array}) where {T <: LinearAlgebra.BlasFloat}
     if A.op == identity
         return stride(A, 1) == 1 || stride(A, 2) == 1
     elseif A.op == conj
         return stride(A, 2) == 1
     else # should never happen
         return false
+    end
+end
+@static if isdefined(Core, :Memory)
+    function isblasmatrix(A::StridedView{T, 2, <:Memory}) where {T <: LinearAlgebra.BlasFloat}
+        if A.op == identity
+            return stride(A, 1) == 1 || stride(A, 2) == 1
+        elseif A.op == conj
+            return stride(A, 2) == 1
+        else # should never happen
+            return false
+        end
     end
 end
 function getblasmatrix(A::StridedView{T, 2}) where {T <: LinearAlgebra.BlasFloat}
