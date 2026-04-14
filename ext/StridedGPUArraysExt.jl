@@ -38,8 +38,7 @@ end
 
 @kernel function _mapreduce_gpu_kernel!(
         f, op, initop,
-        dims_red, strides, offsets,
-        arrays
+        dims_red, strides, offsets, ops, arrays
     )
 
     I_out = @index(Global, Cartesian)
@@ -50,21 +49,25 @@ end
     # Initialize accumulator from current output value (or apply initop)
     out = arrays[1]
     out_I_parent = Is_parent[1]
-    @inbounds acc = _gpu_init_acc(initop, out[ParentIndex(out_I_parent)])
+    @inbounds acc = _gpu_init_acc(initop, ops[1](out[out_I_parent]))
 
     inputs = Base.tail(arrays)
     inputs_I_parent = Base.tail(Is_parent)
     inputs_strides = Base.tail(strides)
+    inputs_ops = Base.tail(ops)
 
     for I_red in CartesianIndices(dims_red)
         # Compute parent index for current reduction index
         Is_red_parent = cartesian2parent.(inputs_strides, Ref(I_red))
+        Is_inputs = inputs_I_parent .+ Is_red_parent
         # Get values from each input array, apply map function, and accumulate
-        vals = getindex.(inputs, ParentIndex.(inputs_I_parent .+ Is_red_parent))
+        vals = map(inputs, inputs_ops, Is_inputs) do in, in_op, in_I
+            in_op(getindex(in, in_I))
+        end
         acc = _gpu_accum(op, acc, f(vals...))
     end
     # Write back result to output array
-    @inbounds out[ParentIndex(out_I_parent)] = acc
+    @inbounds out[out_I_parent] = ops[1](acc)
 end
 
 # GPU-compatible _mapreduce: avoids scalar indexing (first(A), out[ParentIndex(1)])
@@ -120,7 +123,8 @@ function Strided._mapreduce_block!(
 
     backend = KernelAbstractions.get_backend(parent(out))
     kernel! = _mapreduce_gpu_kernel!(backend)
-    kernel!(f, op, initop, dims_red, strides, offsets, arrays; ndrange = dims_out)
+    ops = getproperty.(arrays, :op)
+    kernel!(f, op, initop, dims_red, strides, offsets, ops, parent.(arrays); ndrange = dims_out)
 
     return nothing
 end
