@@ -103,7 +103,7 @@ end
 @inline make_capture(a) = a
 
 # Evaluate CaptureArgs
-(c::CaptureArgs)(vals...) = consume(c, vals)[1]
+@inline (c::CaptureArgs)(vals...) = consume(c, vals)[1]
 @inline function consume(c::CaptureArgs{F, Args}, vals) where {F, Args}
     args, newvals = t_consume(c.args, vals)
     return c.f(args...), newvals
