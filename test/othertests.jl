@@ -1,195 +1,157 @@
-backends = [("Array", identity), ("JLArray", JLArray)]
-
 @testset "in-place matrix operations" begin
-    for (backend_name, make_arr) in backends
-        @testset "$T ($backend_name)" for T in (Float32, Float64, ComplexF32, ComplexF64)
-            data1 = randn(T, (1000, 1000))
-            data2 = randn(T, (1000, 1000))
-            # CPU reference
-            A1 = copy(data1); A2 = copy(data2)
-            # Backend under test
-            B1 = StridedView(make_arr(copy(data1)))
-            B2 = StridedView(make_arr(copy(data2)))
+    @testset for T in (Float32, Float64, ComplexF32, ComplexF64)
+        A1 = randn(T, (1000, 1000))
+        A2 = similar(A1)
+        A1c = copy(A1)
+        A2c = copy(A2)
+        B1 = StridedView(A1c)
+        B2 = StridedView(A2c)
 
-            conj!(A1)
-            conj!(B1)
-            @test A1 ≈ Array(B1)
-            adjoint!(A2, A1)
-            adjoint!(B2, B1)
-            @test A2 ≈ Array(B2)
-            transpose!(A2, A1)
-            transpose!(B2, B1)
-            @test A2 ≈ Array(B2)
-            permutedims!(A2, A1, (2, 1))
-            permutedims!(B2, B1, (2, 1))
-            @test A2 ≈ Array(B2)
-        end
+        @test conj!(A1) == conj!(B1)
+        @test adjoint!(A2, A1) == adjoint!(B2, B1)
+        @test transpose!(A2, A1) == transpose!(B2, B1)
+        @test permutedims!(A2, A1, (2, 1)) == permutedims!(B2, B1, (2, 1))
     end
 end
 
 @testset "map, scale!, axpy! and axpby! with StridedView" begin
-    for (backend_name, make_arr) in backends
-        @testset "$T ($backend_name)" for T in (Float32, Float64, ComplexF32, ComplexF64)
-            @testset for N in 2:6
-                dims = ntuple(n -> div(60, N), N)
-                perm1, perm2, perm3 = randperm(N), randperm(N), randperm(N)
-                R1_cpu, R2_cpu, R3_cpu = rand(T, dims), rand(T, dims), rand(T, dims)
-                R1 = make_arr(copy(R1_cpu))
-                R2 = make_arr(copy(R2_cpu))
-                R3 = make_arr(copy(R3_cpu))
-                B1 = permutedims(StridedView(R1), perm1)
-                B2 = permutedims(StridedView(R2), perm2)
-                B3 = permutedims(StridedView(R3), perm3)
-                A1 = Array(B1)
-                A2 = Array(B2)
-                A3 = Array(B3)
+    @testset for T in (Float32, Float64, ComplexF32, ComplexF64)
+        @testset for N in 2:6
+            dims = ntuple(n -> div(60, N), N)
+            R1, R2, R3 = rand(T, dims), rand(T, dims), rand(T, dims)
+            B1 = permutedims(StridedView(R1), randperm(N))
+            B2 = permutedims(StridedView(R2), randperm(N))
+            B3 = permutedims(StridedView(R3), randperm(N))
+            A1 = convert(Array, B1)
+            A2 = convert(Array{T}, B2) # test different converts
+            A3 = convert(Array{T, N}, B3)
+            C1 = deepcopy(B1)
 
-                @test Array(rmul!(B1, 1 // 2)) ≈ rmul!(A1, 1 // 2)
-                @test Array(lmul!(1 // 3, B2)) ≈ lmul!(1 // 3, A2)
-                @test Array(axpy!(1 // 3, B1, B2)) ≈ axpy!(1 // 3, A1, A2)
-                @test Array(axpy!(1, B2, B3)) ≈ axpy!(1, A2, A3)
-                @test Array(axpby!(1 // 3, B1, 1 // 2, B3)) ≈ axpby!(1 // 3, A1, 1 // 2, A3)
-                @test Array(axpby!(1, B2, 1, B1)) ≈ axpby!(1, A2, 1, A1)
-                @test Array(map((x, y, z) -> sin(x) + y / exp(-abs(z)), B1, B2, B3)) ≈
-                    map((x, y, z) -> sin(x) + y / exp(-abs(z)), A1, A2, A3)
-                @test map((x, y, z) -> sin(x) + y / exp(-abs(z)), B1, B2, B3) isa StridedView
-                if make_arr === identity
-                    @test map((x, y, z) -> sin(x) + y / exp(-abs(z)), B1, A2, B3) isa Array
-                end
-                @test Array(mul!(B1, 1, B2)) ≈ mul!(A1, 1, A2)
-                @test Array(mul!(B1, B2, 1)) ≈ mul!(A1, A2, 1)
-            end
+            @test rmul!(B1, 1 // 2) ≈ rmul!(A1, 1 // 2)
+            @test lmul!(1 // 3, B2) ≈ lmul!(1 // 3, A2)
+            @test axpy!(1 // 3, B1, B2) ≈ axpy!(1 // 3, A1, A2)
+            @test axpy!(1, B2, B3) ≈ axpy!(1, A2, A3)
+            @test axpby!(1 // 3, B1, 1 // 2, B3) ≈ axpby!(1 // 3, A1, 1 // 2, A3)
+            @test axpby!(1, B2, 1, B1) ≈ axpby!(1, A2, 1, A1)
+            @test map((x, y, z) -> sin(x) + y / exp(-abs(z)), B1, B2, B3) ≈
+                map((x, y, z) -> sin(x) + y / exp(-abs(z)), A1, A2, A3)
+            @test map((x, y, z) -> sin(x) + y / exp(-abs(z)), B1, B2, B3) isa StridedView
+            @test map((x, y, z) -> sin(x) + y / exp(-abs(z)), B1, A2, B3) isa Array
+            @test mul!(B1, 1, B2) ≈ mul!(A1, 1, A2)
+            @test mul!(B1, B2, 1) ≈ mul!(A1, A2, 1)
         end
     end
 end
 
 @testset "broadcast with StridedView" begin
-    for (backend_name, make_arr) in backends
-        @testset "$T ($backend_name)" for T in (Float32, Float64, ComplexF32, ComplexF64)
-            R1_cpu = rand(T, (10,))
-            R2_cpu = rand(T, (10, 10))
-            R3_cpu = rand(T, (10, 10, 10))
-            perm2, perm3 = randperm(2), randperm(3)
-            R1 = make_arr(copy(R1_cpu))
-            R2 = make_arr(copy(R2_cpu))
-            R3 = make_arr(copy(R3_cpu))
-            B1 = StridedView(R1)
-            B2 = permutedims(StridedView(R2), perm2)
-            B3 = permutedims(StridedView(R3), perm3)
-            A1 = Array(B1)
-            A2 = Array(B2)
-            A3 = Array(B3)
+    @testset for T in (Float32, Float64, ComplexF32, ComplexF64)
+        R1, R2, R3 = rand(T, (10,)), rand(T, (10, 10)), rand(T, (10, 10, 10))
+        B1 = StridedView(R1)
+        B2 = permutedims(StridedView(R2), randperm(2))
+        B3 = permutedims(StridedView(R3), randperm(3))
+        A1 = convert(Array, B1)
+        A2 = convert(Array{T}, B2)
+        A3 = convert(Array{T, 3}, B3)
 
-            @test Array(@inferred(B1 .+ sin.(B2 .- 3))) ≈ A1 .+ sin.(A2 .- 3)
-            @test Array(@inferred(B2' .* B3 .- Ref(0.5))) ≈ A2' .* A3 .- Ref(0.5)
-            @test Array(@inferred(B2' .* B3 .- max.(abs.(B1), real.(B3)))) ≈
-                A2' .* A3 .- max.(abs.(A1), real.(A3))
+        @test @inferred(B1 .+ sin.(B2 .- 3)) ≈ A1 .+ sin.(A2 .- 3)
+        @test @inferred(B2' .* B3 .- Ref(0.5)) ≈ A2' .* A3 .- Ref(0.5)
+        @test @inferred(B2' .* B3 .- max.(abs.(B1), real.(B3))) ≈
+            A2' .* A3 .- max.(abs.(A1), real.(A3))
 
-            @test (B1 .+ sin.(B2 .- 3)) isa StridedView
-            @test (B2' .* B3 .- Ref(0.5)) isa StridedView
-            @test (B2' .* B3 .- max.(abs.(B1), real.(B3))) isa StridedView
-            if make_arr === identity
-                @test (B2' .* A3 .- max.(abs.(B1), real.(B3))) isa Array
-            end
-        end
+        @test (B1 .+ sin.(B2 .- 3)) isa StridedView
+        @test (B2' .* B3 .- Ref(0.5)) isa StridedView
+        @test (B2' .* B3 .- max.(abs.(B1), real.(B3))) isa StridedView
+        @test (B2' .* A3 .- max.(abs.(B1), real.(B3))) isa Array
     end
 end
 
 @testset "broadcast with zero-length StridedView" begin
-    for (backend_name, make_arr) in backends
-        @testset "$T ($backend_name)" for T in (Float32, Float64, ComplexF32, ComplexF64)
-            A1 = StridedView(make_arr(zeros(T, (2, 0))))
-            A2 = StridedView(make_arr(zeros(T, (2, 0))))
-            @test Array(A1 .+ A2) == zeros(T, (2, 0))
-        end
+    @testset for T in (Float32, Float64, ComplexF32, ComplexF64)
+        A1 = StridedView(zeros(T, (2, 0)))
+        A2 = StridedView(zeros(T, (2, 0)))
+        @test (A1 .+ A2) == StridedView(zeros(T, (2, 0)))
     end
 end
 
 @testset "mapreduce with StridedView" begin
-    for (backend_name, make_arr) in backends
-        @testset "$T ($backend_name)" for T in (Float32, Float64, ComplexF32, ComplexF64)
-            R1_cpu = rand(T, (10, 10, 10, 10, 10, 10))
-            R2_cpu = rand(T, (10, 10, 10))
-            R1 = make_arr(copy(R1_cpu))
-            R2 = make_arr(copy(R2_cpu))
+    @testset for T in (Float32, Float64, ComplexF32, ComplexF64)
+        R1 = rand(T, (10, 10, 10, 10, 10, 10))
+        @test sum(R1; dims = (1, 3, 5)) ≈ sum(StridedView(R1); dims = (1, 3, 5))
+        @test mapreduce(sin, +, R1; dims = (1, 3, 5)) ≈
+            mapreduce(sin, +, StridedView(R1); dims = (1, 3, 5))
+        R2 = rand(T, (10, 10, 10))
+        R2c = copy(R2)
+        @test Strided._mapreducedim!(
+            sin, +, identity, (10, 10, 10, 10, 10, 10),
+            (
+                sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)),
+                StridedView(R1),
+            )
+        ) ≈
+            mapreduce(sin, +, R1; dims = (2, 3, 6)) .+ reshape(R2, (10, 1, 1, 10, 10, 1))
+        R2c = copy(R2)
+        @test Strided._mapreducedim!(
+            sin, +, x -> 0, (10, 10, 10, 10, 10, 10),
+            (
+                sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)),
+                StridedView(R1),
+            )
+        ) ≈
+            mapreduce(sin, +, R1; dims = (2, 3, 6))
+        R2c = copy(R2)
+        β = rand(T)
+        @test Strided._mapreducedim!(
+            sin, +, x -> β * x, (10, 10, 10, 10, 10, 10),
+            (
+                sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)),
+                StridedView(R1),
+            )
+        ) ≈
+            mapreduce(sin, +, R1; dims = (2, 3, 6)) .+
+            β .* reshape(R2, (10, 1, 1, 10, 10, 1))
+        R2c = copy(R2)
+        @test Strided._mapreducedim!(
+            sin, +, x -> β, (10, 10, 10, 10, 10, 10),
+            (
+                sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)),
+                StridedView(R1),
+            )
+        ) ≈
+            mapreduce(sin, +, R1; dims = (2, 3, 6), init = β)
+        R2c = copy(R2)
+        @test Strided._mapreducedim!(
+            sin, +, conj, (10, 10, 10, 10, 10, 10),
+            (
+                sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)),
+                StridedView(R1),
+            )
+        ) ≈
+            mapreduce(sin, +, R1; dims = (2, 3, 6)) .+
+            conj.(reshape(R2, (10, 1, 1, 10, 10, 1)))
 
-            @test sum(StridedView(R1); dims = (1, 3, 5)) isa StridedView
-            @test Array(sum(StridedView(R1); dims = (1, 3, 5))) ≈ sum(R1_cpu; dims = (1, 3, 5))
-            @test Array(mapreduce(sin, +, StridedView(R1); dims = (1, 3, 5))) ≈
-                mapreduce(sin, +, R1_cpu; dims = (1, 3, 5))
-
-            R2c = copy(R2)
-            @test Array(
-                Strided._mapreducedim!(
-                    sin, +, identity, (10, 10, 10, 10, 10, 10),
-                    (sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)), StridedView(R1))
-                )
-            ) ≈ mapreduce(sin, +, R1_cpu; dims = (2, 3, 6)) .+ reshape(R2_cpu, (10, 1, 1, 10, 10, 1))
-
-            R2c = copy(R2)
-            @test Array(
-                Strided._mapreducedim!(
-                    sin, +, x -> 0, (10, 10, 10, 10, 10, 10),
-                    (sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)), StridedView(R1))
-                )
-            ) ≈ mapreduce(sin, +, R1_cpu; dims = (2, 3, 6))
-
-            R2c = copy(R2)
-            β = rand(T)
-            @test Array(
-                Strided._mapreducedim!(
-                    sin, +, x -> β * x, (10, 10, 10, 10, 10, 10),
-                    (sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)), StridedView(R1))
-                )
-            ) ≈ mapreduce(sin, +, R1_cpu; dims = (2, 3, 6)) .+ β .* reshape(R2_cpu, (10, 1, 1, 10, 10, 1))
-
-            R2c = copy(R2)
-            @test Array(
-                Strided._mapreducedim!(
-                    sin, +, x -> β, (10, 10, 10, 10, 10, 10),
-                    (sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)), StridedView(R1))
-                )
-            ) ≈ mapreduce(sin, +, R1_cpu; dims = (2, 3, 6), init = β)
-
-            R2c = copy(R2)
-            @test Array(
-                Strided._mapreducedim!(
-                    sin, +, conj, (10, 10, 10, 10, 10, 10),
-                    (sreshape(StridedView(R2c), (10, 1, 1, 10, 10, 1)), StridedView(R1))
-                )
-            ) ≈ mapreduce(sin, +, R1_cpu; dims = (2, 3, 6)) .+ conj.(reshape(R2_cpu, (10, 1, 1, 10, 10, 1)))
-
-            R3_cpu = rand(T, (100, 100, 2))
-            R3 = make_arr(copy(R3_cpu))
-            @test Array(sum(StridedView(R3); dims = (1, 2))) ≈ sum(R3_cpu; dims = (1, 2))
-        end
+        R3 = rand(T, (100, 100, 2))
+        @test sum(R3; dims = (1, 2)) ≈ sum(StridedView(R3); dims = (1, 2))
     end
 end
 
 @testset "complete reductions with StridedView" begin
-    for (backend_name, make_arr) in backends
-        @testset "$T ($backend_name)" for T in (Float32, Float64, ComplexF32, ComplexF64)
-            R1_cpu = rand(T, (10, 10, 10, 10, 10, 10))
-            R1 = make_arr(copy(R1_cpu))
+    @testset for T in (Float32, Float64, ComplexF32, ComplexF64)
+        R1 = rand(T, (10, 10, 10, 10, 10, 10))
 
-            @test sum(StridedView(R1)) ≈ sum(R1_cpu)
-            @test maximum(abs, StridedView(R1)) ≈ maximum(abs, R1_cpu)
-            @test minimum(real, StridedView(R1)) ≈ minimum(real, R1_cpu)
-            @test sum(x -> real(x) < 0, StridedView(R1)) == sum(x -> real(x) < 0, R1_cpu)
+        @test sum(R1) ≈ sum(StridedView(R1))
+        @test maximum(abs, R1) ≈ maximum(abs, StridedView(R1))
+        @test minimum(real, R1) ≈ minimum(real, StridedView(R1))
+        @test sum(x -> real(x) < 0, R1) == sum(x -> real(x) < 0, StridedView(R1))
 
-            perm = (randperm(6)...,)
-            R2_cpu = PermutedDimsArray(R1_cpu, perm)
-            R2 = PermutedDimsArray(R1, perm)
+        R2 = PermutedDimsArray(R1, (randperm(6)...,))
 
-            @test sum(StridedView(R2)) ≈ sum(R2_cpu)
-            @test maximum(abs, StridedView(R2)) ≈ maximum(abs, R2_cpu)
-            @test minimum(real, StridedView(R2)) ≈ minimum(real, R2_cpu)
-            @test sum(x -> real(x) < 0, StridedView(R2)) == sum(x -> real(x) < 0, R1_cpu)
+        @test sum(R2) ≈ sum(StridedView(R2))
+        @test maximum(abs, R2) ≈ maximum(abs, StridedView(R2))
+        @test minimum(real, R2) ≈ minimum(real, StridedView(R2))
+        @test sum(x -> real(x) < 0, R1) == sum(x -> real(x) < 0, StridedView(R2))
 
-            R3_cpu = rand(T, (5, 5, 5))
-            R3 = make_arr(copy(R3_cpu))
-            @test prod(exp, StridedView(R3)) ≈ exp(sum(StridedView(R3)))
-        end
+        R3 = rand(T, (5, 5, 5))
+        @test prod(exp, StridedView(R3)) ≈ exp(sum(StridedView(R3)))
     end
 end
 
