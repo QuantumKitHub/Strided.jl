@@ -1,8 +1,8 @@
-module StridedCUDAExt
+module StridedCUDACoreExt
 
-using Strided, StridedViews, CUDA
-using CUDA: Adapt, KernelAdaptor
-using CUDA: GPUArrays
+using Strided, StridedViews, CUDACore
+using CUDACore: Adapt, KernelAdaptor
+using CUDACore: GPUArrays
 
 const ALL_FS = Union{typeof(adjoint), typeof(conj), typeof(identity), typeof(transpose)}
 
