@@ -4,7 +4,7 @@ using Random
 using Strided
 using Strided: StridedView
 using Aqua
-using JLArrays, AMDGPU, CUDA, GPUArrays
+using JLArrays, AMDGPU, CUDACore, GPUArrays
 
 Random.seed!(1234)
 
@@ -32,7 +32,7 @@ if !is_buildkite
     Aqua.test_all(Strided; piracies = false)
 end
 
-if CUDA.functional()
+if CUDACore.functional()
     include("cuda.jl")
 end
 

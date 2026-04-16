@@ -1,6 +1,6 @@
 name = "Strided"
 uuid = "5e0ebb24-38b0-5f93-81fe-25c709ecae67"
-version = "2.3.6"
+version = "2.4.0"
 authors = ["Lukas Devos <lukas.devos@ugent.be>", "Maarten Van Damme <maartenvd1994@gmail.com>", "Jutho Haegeman <jutho.haegeman@ugent.be>"]
 
 [deps]
@@ -12,18 +12,18 @@ TupleTools = "9d95972d-f1c8-5527-a6e0-b4b365fa01f6"
 AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
 JLArrays = "27aeb0d3-9eb9-45fb-866b-73c2ecf80fcb"
 GPUArrays = "0c68f7d7-f131-5f86-a1c3-88cf8149b2d7"
-CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+CUDACore = "bd0ed864-bdfe-4181-a5ed-ce625a5fdea2"
 
 [extensions]
 StridedAMDGPUExt = "AMDGPU"
 StridedJLArraysExt = "JLArrays"
 StridedGPUArraysExt = "GPUArrays"
-StridedCUDAExt = "CUDA"
+StridedCUDACoreExt = "CUDACore"
 
 [compat]
 AMDGPU = "2"
 Aqua = "0.8"
-CUDA = "5"
+CUDACore = "6"
 JLArrays = "0.3.1"
 GPUArrays = "11.4.1"
 LinearAlgebra = "1.6"
@@ -36,11 +36,11 @@ julia = "1.6"
 [extras]
 AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
 Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
-CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+CUDACore = "bd0ed864-bdfe-4181-a5ed-ce625a5fdea2"
 JLArrays = "27aeb0d3-9eb9-45fb-866b-73c2ecf80fcb"
 GPUArrays = "0c68f7d7-f131-5f86-a1c3-88cf8149b2d7"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Test", "Random", "Aqua", "AMDGPU", "CUDA", "GPUArrays", "JLArrays"]
+test = ["Test", "Random", "Aqua", "AMDGPU", "CUDACore", "GPUArrays", "JLArrays"]
