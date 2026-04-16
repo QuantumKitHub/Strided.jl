@@ -1,7 +1,7 @@
 for T in (Float32, Float64, Complex{Float32}, Complex{Float64})
     @testset "Copy with CuStridedView: $T, $f1, $f2" for f2 in (identity, conj, adjoint, transpose), f1 in (identity, conj, transpose, adjoint)
         for m1 in (0, 16, 32), m2 in (0, 16, 32)
-            A1 = CUDACore.randn(T, (m1, m2))
+            A1 = cuRAND.randn(T, (m1, m2))
             A2 = similar(A1)
             zA1 = CuMatrix(f1(zeros(T, (m1, m2))))
             zA2 = CuMatrix(f2(zeros(T, (m1, m2))))

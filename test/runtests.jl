@@ -4,7 +4,7 @@ using Random
 using Strided
 using Strided: StridedView
 using Aqua
-using JLArrays, AMDGPU, CUDACore, GPUArrays
+using JLArrays, AMDGPU, CUDACore, cuRAND, GPUArrays
 
 Random.seed!(1234)
 
