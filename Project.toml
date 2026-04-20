@@ -11,9 +11,6 @@ TupleTools = "9d95972d-f1c8-5527-a6e0-b4b365fa01f6"
 [weakdeps]
 GPUArrays = "0c68f7d7-f131-5f86-a1c3-88cf8149b2d7"
 
-[sources]
-StridedViews = {rev = "test", url = "https://github.com/QuantumKitHub/StridedViews.jl"}
-
 [extensions]
 StridedGPUArraysExt = "GPUArrays"
 
