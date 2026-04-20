@@ -3,52 +3,130 @@ module StridedGPUArraysExt
 using Strided, GPUArrays, LinearAlgebra
 using GPUArrays: Adapt, KernelAbstractions
 using GPUArrays.KernelAbstractions: @kernel, @index
+using StridedViews: ParentIndex
 
 ALL_FS = Union{typeof(adjoint), typeof(conj), typeof(identity), typeof(transpose)}
 
-KernelAbstractions.get_backend(sv::StridedView{T, N, TA}) where {T, N, TA <: AnyGPUArray{T}} = KernelAbstractions.get_backend(parent(sv))
+# StridedView backed by any GPU array type, with element type linked to the parent.
+const GPUStridedView{T, N} = StridedView{T, N, <:AnyGPUArray{T}}
 
-function Base.Broadcast.BroadcastStyle(gpu_sv::StridedView{T, N, TA}) where {T, N, TA <: AnyGPUArray{T}}
-    raw_style = Base.Broadcast.BroadcastStyle(TA)
-    return typeof(raw_style)(Val(N)) # sets the dimensionality correctly
+KernelAbstractions.get_backend(sv::GPUStridedView) = KernelAbstractions.get_backend(parent(sv))
+
+# Conversion to CPU Array: materialise into a contiguous GPU array first (so the
+# GPU-to-GPU copy! path is used), then let the GPU array type handle the transfer.
+function Base.Array(a::GPUStridedView)
+    b = similar(parent(a), eltype(a), size(a))
+    copy!(StridedView(b), a)
+    return Array(b)
 end
 
-function Base.copy!(dst::AbstractArray{TD, ND}, src::StridedView{TS, NS, TAS, FS}) where {TD <: Number, ND, TS <: Number, NS, TAS <: AbstractGPUArray{TS}, FS <: ALL_FS}
-    bc_style = Base.Broadcast.BroadcastStyle(TAS)
-    bc = Base.Broadcast.Broadcasted(bc_style, identity, (src,), axes(dst))
-    GPUArrays._copyto!(dst, bc)
-    return dst
-end
+# ---------- GPU mapreduce support ----------
 
-function Base.copyto!(dest::StridedView{T, N, <:AnyGPUArray{T}}, bc::Base.Broadcast.Broadcasted{Strided.StridedArrayStyle{N}}) where {T <: Number, N}
-    dims = size(dest)
-    any(isequal(0), dims) && return dest
+@inline _gpu_init_acc(::Nothing, current_val) = current_val
+@inline _gpu_init_acc(initop, current_val) = initop(current_val)
 
-    GPUArrays._copyto!(dest, bc)
-    return dest
-end
+@inline _gpu_accum(::Nothing, acc, val) = val
+@inline _gpu_accum(op, acc, val) = op(acc, val)
 
-# lifted from GPUArrays.jl
-function Base.fill!(A::StridedView{T, N, TA, F}, x) where {T, N, TA <: AbstractGPUArray{T}, F <: ALL_FS}
-    isempty(A) && return A
-    @kernel function fill_kernel!(a, val)
-        idx = @index(Global, Cartesian)
-        @inbounds a[idx] = val
+@inline function cartesian2parent(strides::NTuple{N, Int}, cidx::CartesianIndex{N}) where {N}
+    s = 0
+    for d in Base.OneTo(N)
+        @inbounds s += strides[d] * (cidx[d] - 1)
     end
-    # ndims check for 0D support
-    kernel = fill_kernel!(KernelAbstractions.get_backend(A))
-    f_x = F <: Union{typeof(conj), typeof(adjoint)} ? conj(x) : x
-    kernel(A, f_x; ndrange = size(A))
-    return A
+    return s
 end
 
-function LinearAlgebra.mul!(
-        C::StridedView{TC, 2, <:AnyGPUArray{TC}},
-        A::StridedView{TA, 2, <:AnyGPUArray{TA}},
-        B::StridedView{TB, 2, <:AnyGPUArray{TB}},
-        α::Number, β::Number
-    ) where {TC, TA, TB}
-    return GPUArrays.generic_matmatmul!(C, A, B, α, β)
+@kernel function _mapreduce_gpu_kernel!(
+        f, op, initop,
+        dims_red, strides, offsets, ops, arrays
+    )
+
+    I_out = @index(Global, Cartesian)
+
+    # Compute parent index for current index.
+    Is_parent = cartesian2parent.(strides, Ref(I_out)) .+ offsets .+ 1
+
+    # Initialize accumulator from current output value (or apply initop)
+    out = arrays[1]
+    out_I_parent = Is_parent[1]
+    @inbounds acc = _gpu_init_acc(initop, ops[1](out[out_I_parent]))
+
+    inputs = Base.tail(arrays)
+    inputs_I_parent = Base.tail(Is_parent)
+    inputs_strides = Base.tail(strides)
+    inputs_ops = Base.tail(ops)
+
+    for I_red in CartesianIndices(dims_red)
+        # Compute parent index for current reduction index
+        Is_red_parent = cartesian2parent.(inputs_strides, Ref(I_red))
+        Is_inputs = inputs_I_parent .+ Is_red_parent
+        # Get values from each input array, apply map function, and accumulate
+        vals = map(inputs, inputs_ops, Is_inputs) do in, in_op, in_I
+            in_op(getindex(in, in_I))
+        end
+        acc = _gpu_accum(op, acc, f(vals...))
+    end
+    # Write back result to output array
+    @inbounds out[out_I_parent] = ops[1](acc)
+end
+
+# GPU-compatible _mapreduce: avoids scalar indexing (first(A), out[ParentIndex(1)])
+# that JLArrays/real GPUs prohibit. Mirrors GPUArrays' neutral_element approach:
+# infer output type via Broadcast machinery, look up the neutral element (errors on
+# unknown ops), fill the output buffer, then read back a single scalar via Array().
+function Strided._mapreduce(
+        f, op, A::GPUStridedView{T, N}, nt = nothing
+    ) where {T, N}
+    if isempty(A)
+        b = Base.mapreduce_empty(f, op, T)
+        return nt === nothing ? b : op(b, nt.init)
+    end
+
+    dims = size(A)
+
+    if nt === nothing
+        ET = Base.Broadcast.combine_eltypes(f, (A,))
+        ET = Base.promote_op(op, ET, ET)
+        (ET === Union{} || ET === Any) &&
+            error("cannot infer output element type for mapreduce; pass an explicit `init`")
+        init = GPUArrays.neutral_element(op, ET)
+    else
+        ET = typeof(nt.init)
+        init = nt.init
+    end
+
+    out = similar(parent(A), ET, (1,))
+    fill!(out, init)
+
+    Strided._mapreducedim!(f, op, nothing, dims, (sreshape(StridedView(out), one.(dims)), A))
+
+    return Array(out)[1]
+end
+
+function Strided._mapreduce_block!(
+        f, op, initop,
+        dims::Dims{N},
+        strides, offsets, costs,
+        arrays::Tuple{GPUStridedView{TO, N}, Vararg{GPUStridedView{<:Any, N}}}
+    ) where {TO, N}
+
+    out = arrays[1]
+    out_strides = strides[1]
+
+    # Number of output elements = product of non-reduction dims
+    dims_out = ntuple(Val(N)) do d
+        @inbounds iszero(out_strides[d]) ? 1 : dims[d]
+    end
+    dims_red = ntuple(Val(N)) do d
+        @inbounds iszero(out_strides[d]) ? dims[d] : 1
+    end
+
+    backend = KernelAbstractions.get_backend(parent(out))
+    kernel! = _mapreduce_gpu_kernel!(backend)
+    ops = getproperty.(arrays, :op)
+    kernel!(f, op, initop, dims_red, strides, offsets, ops, parent.(arrays); ndrange = dims_out)
+
+    return nothing
 end
 
 end
