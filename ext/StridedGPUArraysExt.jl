@@ -129,4 +129,27 @@ function Strided._mapreduce_block!(
     return nothing
 end
 
+# ---------- GPU BLAS dispatch ----------
+
+function _isgpublasmatrix(A::GPUStridedView{T, 2}) where {T <: LinearAlgebra.BlasFloat}
+    A.op == identity && return stride(A, 1) == 1 || stride(A, 2) == 1
+    A.op == conj     && return stride(A, 2) == 1
+    return false
+end
+
+# GPU override of _mul!: same logic as the CPU path in linalg.jl but uses
+# _isgpublasmatrix (no `pointer isa Ptr` guard) and forces nthreads=1.
+# getblasmatrix and _threaded_blas_mul! from linalg.jl work fine for GPU types;
+# blas_mul! is overridden per vendor in StridedCUDAExt / StridedAMDGPUExt / StridedMetalExt.
+function Strided._mul!(
+        C::GPUStridedView{T, 2}, A::GPUStridedView{T, 2}, B::GPUStridedView{T, 2},
+        α::Number, β::Number
+    ) where {T <: LinearAlgebra.BlasFloat}
+    if stride(C, 1) == 1 && _isgpublasmatrix(A) && _isgpublasmatrix(B)
+        Strided._threaded_blas_mul!(C, A, B, α, β, 1)
+    else
+        Strided.__mul!(C, A, B, α, β)
+    end
+end
+
 end

@@ -109,6 +109,38 @@ end
     end
 end
 
+@testset "matrix multiplication ($AT)" for AT in ATs
+    for T in (Float32, ComplexF32)
+        d = 20
+        A = StridedView(randn(T, d, d))
+        B = StridedView(randn(T, d, d))
+        C = StridedView(randn(T, d, d))
+
+        @test compare((c, a, b) -> mul!(c, a, b), AT, C, A, B)
+
+        for op1 in (identity, conj, transpose, adjoint)
+            for op2 in (identity, conj, transpose, adjoint)
+                @test compare((a, b) -> op1(a) * op2(b), AT, A, B)
+            end
+        end
+
+        α = randn(T)
+        β = randn(T)
+        for op3 in (identity, conj, transpose, adjoint)
+            @test compare((c, a, b) -> mul!(op3(c), a, b, α, β), AT, C, A, B)
+        end
+
+        # strided-slice case: lda > m, exercises the non-unit leading-dimension path
+        Abig = StridedView(randn(T, 2d, 2d))
+        Bbig = StridedView(randn(T, 2d, 2d))
+        Cbig = StridedView(randn(T, 2d, 2d))
+        As = Abig[1:d, 1:d]   # size (d,d), stride(As,2) == 2d > d
+        Bs = Bbig[1:d, 1:d]
+        Cs = Cbig[1:d, 1:d]
+        @test compare((c, a, b) -> mul!(c, a, b), AT, Cs, As, Bs)
+    end
+end
+
 @testset "reduce ($AT)" for AT in ATs
     N = 4
     for T in (Float32, ComplexF32)

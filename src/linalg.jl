@@ -107,6 +107,14 @@ function _mul!(
     end
 end
 
+function blas_mul!(
+        tA::AbstractChar, tB::AbstractChar, α::T,
+        A::StridedView{T, 2}, B::StridedView{T, 2},
+        β::T, C::StridedView{T, 2}
+    ) where {T <: LinearAlgebra.BlasFloat}
+    return LinearAlgebra.BLAS.gemm!(tA, tB, α, A, B, β, C)
+end
+
 function _threaded_blas_mul!(
         C::StridedView{T, 2}, A::StridedView{T, 2}, B::StridedView{T, 2},
         α::Number, β::Number,
@@ -117,7 +125,7 @@ function _threaded_blas_mul!(
     return if nthreads == 1 || m * n < 1024
         A2, CA = getblasmatrix(A)
         B2, CB = getblasmatrix(B)
-        LinearAlgebra.BLAS.gemm!(CA, CB, convert(T, α), A2, B2, convert(T, β), C)
+        blas_mul!(CA, CB, convert(T, α), A2, B2, convert(T, β), C)
     else
         if m > n
             m2 = round(Int, m / 16) * 8
