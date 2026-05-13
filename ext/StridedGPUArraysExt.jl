@@ -5,6 +5,8 @@ using GPUArrays: Adapt, KernelAbstractions
 using GPUArrays.KernelAbstractions: @kernel, @index
 using StridedViews: ParentIndex
 
+import Strided: isblasmatrix
+
 ALL_FS = Union{typeof(adjoint), typeof(conj), typeof(identity), typeof(transpose)}
 
 # StridedView backed by any GPU array type, with element type linked to the parent.
@@ -128,5 +130,7 @@ function Strided._mapreduce_block!(
 
     return nothing
 end
+
+Strided.isblasmatrix(A::GPUStridedView) = false
 
 end
