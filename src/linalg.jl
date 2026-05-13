@@ -2,6 +2,8 @@
 LinearAlgebra.rmul!(dst::StridedView, α::Number) = mul!(dst, dst, α)
 LinearAlgebra.lmul!(α::Number, dst::StridedView) = mul!(dst, α, dst)
 
+_gemm!(args...) = LinearAlgebra.BLAS.gemm!(args...)
+
 function LinearAlgebra.mul!(
         dst::StridedView{<:Number, N}, α::Number,
         src::StridedView{<:Number, N}
@@ -117,7 +119,7 @@ function _threaded_blas_mul!(
     return if nthreads == 1 || m * n < 1024
         A2, CA = getblasmatrix(A)
         B2, CB = getblasmatrix(B)
-        LinearAlgebra.BLAS.gemm!(CA, CB, convert(T, α), A2, B2, convert(T, β), C)
+        _gemm!(CA, CB, convert(T, α), A2, B2, convert(T, β), C)
     else
         if m > n
             m2 = round(Int, m / 16) * 8

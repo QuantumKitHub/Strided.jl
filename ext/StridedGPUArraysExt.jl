@@ -1,6 +1,7 @@
 module StridedGPUArraysExt
 
 using Strided, GPUArrays, LinearAlgebra
+import Strided: _gemm!
 using GPUArrays: Adapt, KernelAbstractions
 using GPUArrays.KernelAbstractions: @kernel, @index
 using StridedViews: ParentIndex
@@ -18,6 +19,10 @@ function Base.Array(a::GPUStridedView)
     b = similar(parent(a), eltype(a), size(a))
     copy!(StridedView(b), a)
     return Array(b)
+end
+
+function Strided._gemm!(opA::Char, opB::Char, α, A::TA, B::TB, β, C::TC) where {TA <: GPUStridedView, TB <: GPUStridedView, TC <: GPUStridedView}
+    GPUArrays.generic_matmatmul!(C, LinearAlgebra.wrap(A, opA), LinearAlgebra.wrap(B, opB), α, β)
 end
 
 # ---------- GPU mapreduce support ----------
