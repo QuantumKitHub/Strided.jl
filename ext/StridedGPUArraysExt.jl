@@ -22,7 +22,7 @@ function Base.Array(a::GPUStridedView)
 end
 
 function Strided._gemm!(opA::Char, opB::Char, α, A::TA, B::TB, β, C::TC) where {TA <: GPUStridedView, TB <: GPUStridedView, TC <: GPUStridedView}
-    GPUArrays.generic_matmatmul!(C, LinearAlgebra.wrap(A, opA), LinearAlgebra.wrap(B, opB), α, β)
+    return GPUArrays.generic_matmatmul!(C, LinearAlgebra.wrap(A, opA), LinearAlgebra.wrap(B, opB), α, β)
 end
 
 # ---------- GPU mapreduce support ----------
