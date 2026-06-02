@@ -38,6 +38,19 @@ Metal.functional() && push!(ATs, MtlArray)
     end
 end
 
+@testset "mul! ($AT)" for AT in ATs
+    N = 2
+    for T in (Float32, ComplexF32)
+        α = rand(T)
+        β = rand(T)
+        dims = ntuple(Returns(div(64, N)), N)
+        A1 = permutedims(StridedView(rand(T, dims)), randperm(N))
+        A2 = permutedims(StridedView(rand(T, dims)), randperm(N))
+        A3 = permutedims(StridedView(rand(T, dims)), randperm(N))
+        @test compare((C, A, B) -> mul!(C, A, B, α, β), AT, A1, A2, A3)
+        @test compare((C, A, B) -> mul!(C, A, B, α, β), AT, A1, A2, A3)
+    end
+end
 @testset "map, scale!, axpy!, axpby! ($AT)" for AT in ATs
     for T in (Float32, ComplexF32)
         for N in 2:6
@@ -66,6 +79,22 @@ end
         @test compare((x, y, z) -> map((a, b, c) -> sin(a) + b / exp(-abs(c)), x, y, z), AT, A1, A2, A3)
         @test compare((x, y) -> mul!(x, 1, y), AT, A1, A2)
         @test compare((x, y) -> mul!(x, y, 1), AT, A1, A2)
+    end
+end
+
+@testset "copy ($AT)" for AT in ATs
+    N = 2
+    for m1 in (0, 16, 32), m2 in (0, 16, 32), T in (Float32, ComplexF32)
+        dims = (m1, m2)
+        A1 = StridedView(rand(T, dims))
+        A2 = StridedView(rand(T, dims))
+        A3 = StridedView(rand(T, dims))
+        for f2 in (identity, conj, adjoint, transpose), f1 in (identity, conj, transpose, adjoint)
+            axes(f1(A1)) == axes(f2(A2)) || continue
+            B1 = f1(copy(A1))
+            B2 = f2(copy(A2))
+            @test compare((x, y) -> copy!(y, x), AT, B1, B2)
+        end
     end
 end
 
