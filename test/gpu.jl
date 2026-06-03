@@ -18,7 +18,7 @@ CUDACore.functional() && push!(ATs, CuArray)
 AMDGPU.functional() && push!(ATs, ROCArray)
 Metal.functional() && push!(ATs, MtlArray)
 
-@testset "isblasmatrix ($AT)" for AT in ATs 
+@testset "isblasmatrix ($AT)" for AT in ATs
     for T in (Float32, ComplexF32)
         A1 = StridedView(AT(randn(T, 20, 20)))
         @test !Strided.isblasmatrix(A1)
