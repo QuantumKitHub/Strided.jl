@@ -131,6 +131,6 @@ function Strided._mapreduce_block!(
     return nothing
 end
 
-Strided.isblasmatrix(A::GPUStridedView) = false
+Strided.isblasmatrix(A::GPUStridedView{T, 2}) where {T <: LinearAlgebra.BlasFloat} = false
 
 end

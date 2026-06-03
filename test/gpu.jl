@@ -18,6 +18,13 @@ CUDACore.functional() && push!(ATs, CuArray)
 AMDGPU.functional() && push!(ATs, ROCArray)
 Metal.functional() && push!(ATs, MtlArray)
 
+@testset "isblasmatrix ($AT)" for AT in ATs 
+    for T in (Float32, ComplexF32)
+        A1 = StridedView(AT(randn(T, 20, 20)))
+        @test !Strided.isblasmatrix(A1)
+    end
+end
+
 @testset "in-place matrix operations ($AT)" for AT in ATs
     for T in (Float32, ComplexF32)
         A1 = StridedView(randn(T, 20, 20))
@@ -51,6 +58,7 @@ end
         @test compare((C, A, B) -> mul!(C, A, B, α, β), AT, A1, A2, A3)
     end
 end
+
 @testset "map, scale!, axpy!, axpby! ($AT)" for AT in ATs
     for T in (Float32, ComplexF32)
         for N in 2:6
