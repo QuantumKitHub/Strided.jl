@@ -100,11 +100,18 @@ function _mul!(
         α::Number, β::Number
     ) where {T <: LinearAlgebra.BlasFloat}
     if stride(C, 1) == 1 && isblasmatrix(A) && isblasmatrix(B)
-        nthreads = use_threaded_mul() ? get_num_threads() : 1
-        _threaded_blas_mul!(C, A, B, α, β, nthreads)
+        return blas_mul!(C, A, B, α, β)
     else
         return __mul!(C, A, B, α, β)
     end
+end
+
+# for CPU based arrays, this is valid
+function blas_mul!(
+        C::StridedView{T, 2}, A::StridedView{T, 2}, B::StridedView{T, 2},
+        α::Number, β::Number) where {T <: LinearAlgebra.BlasFloat}
+    nthreads = use_threaded_mul() ? get_num_threads() : 1
+    return _threaded_blas_mul!(C, A, B, α, β, nthreads)
 end
 
 function _threaded_blas_mul!(

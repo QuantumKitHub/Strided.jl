@@ -131,6 +131,14 @@ function Strided._mapreduce_block!(
     return nothing
 end
 
-Strided.isblasmatrix(A::GPUStridedView{T, 2}) where {T <: LinearAlgebra.BlasFloat} = false
+function Strided.isblasmatrix(A::GPUStridedView{T, 2}) where {T <: LinearAlgebra.BlasFloat}
+    if A.op == identity
+        return stride(A, 1) == 1 || stride(A, 2) == 1
+    elseif A.op == conj
+        return stride(A, 2) == 1
+    else # should never happen
+        return false
+    end
+end
 
 end

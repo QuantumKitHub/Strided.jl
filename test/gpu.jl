@@ -21,7 +21,7 @@ Metal.functional() && push!(ATs, MtlArray)
 @testset "isblasmatrix ($AT)" for AT in ATs
     for T in (Float32, ComplexF32)
         A1 = StridedView(AT(randn(T, 20, 20)))
-        @test !Strided.isblasmatrix(A1)
+        @test Strided.isblasmatrix(A1)
     end
 end
 
@@ -45,18 +45,15 @@ end
     end
 end
 
-@testset "mul! ($AT)" for AT in ATs
+@testset "mul! ($AT{$T})" for AT in ATs, T in (Float32, ComplexF32)
     N = 2
-    for T in (Float32, ComplexF32)
-        α = rand(T)
-        β = rand(T)
-        dims = ntuple(Returns(div(64, N)), N)
-        A1 = permutedims(StridedView(rand(T, dims)), randperm(N))
-        A2 = permutedims(StridedView(rand(T, dims)), randperm(N))
-        A3 = permutedims(StridedView(rand(T, dims)), randperm(N))
-        @test compare((C, A, B) -> mul!(C, A, B, α, β), AT, A1, A2, A3)
-        @test compare((C, A, B) -> mul!(C, A, B, α, β), AT, A1, A2, A3)
-    end
+    α = rand(T)
+    β = rand(T)
+    dims = ntuple(Returns(div(64, N)), N)
+    A1 = permutedims(StridedView(rand(T, dims)), randperm(N))
+    A2 = permutedims(StridedView(rand(T, dims)), randperm(N))
+    A3 = permutedims(StridedView(rand(T, dims)), randperm(N))
+    @test compare((C, A, B) -> mul!(C, A, B, α, β), AT, A1, A2, A3)
 end
 
 @testset "map, scale!, axpy!, axpby! ($AT)" for AT in ATs
