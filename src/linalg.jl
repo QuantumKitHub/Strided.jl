@@ -109,7 +109,8 @@ end
 # for CPU based arrays, this is valid
 function blas_mul!(
         C::StridedView{T, 2}, A::StridedView{T, 2}, B::StridedView{T, 2},
-        α::Number, β::Number) where {T <: LinearAlgebra.BlasFloat}
+        α::Number, β::Number
+    ) where {T <: LinearAlgebra.BlasFloat}
     nthreads = use_threaded_mul() ? get_num_threads() : 1
     return _threaded_blas_mul!(C, A, B, α, β, nthreads)
 end
