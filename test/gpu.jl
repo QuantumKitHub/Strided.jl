@@ -14,7 +14,7 @@ end
 # types to test for
 ATs = []
 !is_buildkite && push!(ATs, JLArray)
-CUDACore.functional() && push!(ATs, CuArray)
+CUDACore.functional() && cuBLAS.functional() && push!(ATs, CuArray)
 AMDGPU.functional() && push!(ATs, ROCArray)
 Metal.functional() && push!(ATs, MtlArray)
 

@@ -7,7 +7,7 @@ using Aqua
 using Adapt, GPUArrays
 using JLArrays
 using AMDGPU
-using CUDACore, cuRAND
+using CUDACore, cuRAND, cuBLAS
 using Metal
 
 Random.seed!(1234)
