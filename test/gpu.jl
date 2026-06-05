@@ -22,6 +22,10 @@ Metal.functional() && push!(ATs, MtlArray)
     for T in (Float32, ComplexF32)
         A1 = StridedView(AT(randn(T, 20, 20)))
         @test Strided.isblasmatrix(A1)
+        A2 = view(A1, 1:4:20, 1:5:20)
+        @test !Strided.isblasmatrix(A2)
+        A3 = view(conj!(A1), 1:4:20, 1:20) # stride(A3, 2) is not 1
+        @test !Strided.isblasmatrix(A3)
     end
 end
 
@@ -54,6 +58,10 @@ end
     A2 = permutedims(StridedView(rand(T, dims)), randperm(N))
     A3 = permutedims(StridedView(rand(T, dims)), randperm(N))
     @test compare((C, A, B) -> mul!(C, A, B, α, β), AT, A1, A2, A3)
+    vA1 = view(StridedView(rand(T, (32, 32))), 1:2:32, 1:2:32) 
+    vA2 = view(StridedView(rand(T, (32, 32))), 1:2:32, 1:2:32)
+    vA3 = view(StridedView(rand(T, (32, 32))), 1:2:32, 1:2:32)
+    @test compare((C, A, B) -> mul!(C, A, B, α, β), AT, vA1, vA2, vA3)
 end
 
 @testset "map, scale!, axpy!, axpby! ($AT)" for AT in ATs
