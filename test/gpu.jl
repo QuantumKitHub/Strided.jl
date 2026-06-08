@@ -14,9 +14,20 @@ end
 # types to test for
 ATs = []
 !is_buildkite && push!(ATs, JLArray)
-CUDACore.functional() && push!(ATs, CuArray)
+CUDACore.functional() && cuBLAS.functional() && push!(ATs, CuArray)
 AMDGPU.functional() && push!(ATs, ROCArray)
 Metal.functional() && push!(ATs, MtlArray)
+
+@testset "isblasmatrix ($AT)" for AT in ATs
+    for T in (Float32, ComplexF32)
+        A1 = StridedView(AT(randn(T, 20, 20)))
+        @test Strided.isblasmatrix(A1)
+        A2 = view(A1, 1:4:20, 1:5:20)
+        @test !Strided.isblasmatrix(A2)
+        A3 = view(conj!(A1), 1:4:20, 1:20) # stride(A3, 2) is not 1
+        @test !Strided.isblasmatrix(A3)
+    end
+end
 
 @testset "in-place matrix operations ($AT)" for AT in ATs
     for T in (Float32, ComplexF32)
@@ -36,6 +47,38 @@ Metal.functional() && push!(ATs, MtlArray)
         @test compare(transpose!, AT, B1, B2)
         @test compare((x, y) -> permutedims!(x, y, (2, 1)), AT, B1, B2)
     end
+end
+
+@testset "mul! ($AT{$T})" for AT in ATs, T in (Float32, ComplexF32)
+    N = 2
+    α = rand(T)
+    β = rand(T)
+    dims = ntuple(Returns(div(64, N)), N)
+    A1 = permutedims(StridedView(rand(T, dims)), randperm(N))
+    A2 = permutedims(StridedView(rand(T, dims)), randperm(N))
+    A3 = permutedims(StridedView(rand(T, dims)), randperm(N))
+    @test compare((C, A, B) -> mul!(C, A, B, α, β), AT, A1, A2, A3)
+    # test BLAS for all op combinations
+    @testset for sz in ((32, 64), (64, 64), (64, 32))
+        vA1 = view(StridedView(rand(T, sz)), 1:32, 1:32)
+        vA2 = view(StridedView(rand(T, sz)), 1:32, 1:32)
+        vA3 = view(StridedView(rand(T, sz)), 1:32, 1:32)
+        @testset for f1 in (identity, conj, adjoint, transpose), f2 in (identity, conj, adjoint, transpose)
+            @test compare((C, A, B) -> mul!(C, A, B, α, β), AT, vA1, f1(vA2), f2(vA3))
+        end
+    end
+    # non-BLAS fallback path
+    vA1 = view(StridedView(rand(T, (32, 32))), 1:32, 1:32)
+    vA2 = view(StridedView(rand(T, (32, 64))), 1:32, 1:2:64)
+    vA3 = view(StridedView(rand(T, (64, 32))), 1:2:64, 1:32)
+    @testset for f1 in (identity, conj, adjoint, transpose), f2 in (identity, conj, adjoint, transpose)
+        @test compare((C, A, B) -> mul!(C, A, B, α, β), AT, vA1, f1(vA2), f2(vA3))
+    end
+    # non-BLAS fallback path
+    vA1 = view(StridedView(rand(T, (64, 32))), 1:2:64, 1:32)
+    vA2 = view(StridedView(rand(T, (32, 64))), 1:32, 1:2:64)
+    vA3 = view(StridedView(rand(T, (64, 32))), 1:2:64, 1:32)
+    @test compare((C, A, B) -> mul!(C, A, B, α, β), AT, vA1, vA2, vA3)
 end
 
 @testset "map, scale!, axpy!, axpby! ($AT)" for AT in ATs
@@ -66,6 +109,22 @@ end
         @test compare((x, y, z) -> map((a, b, c) -> sin(a) + b / exp(-abs(c)), x, y, z), AT, A1, A2, A3)
         @test compare((x, y) -> mul!(x, 1, y), AT, A1, A2)
         @test compare((x, y) -> mul!(x, y, 1), AT, A1, A2)
+    end
+end
+
+@testset "copy ($AT)" for AT in ATs
+    N = 2
+    for m1 in (0, 16, 32), m2 in (0, 16, 32), T in (Float32, ComplexF32)
+        dims = (m1, m2)
+        A1 = StridedView(rand(T, dims))
+        A2 = StridedView(rand(T, dims))
+        A3 = StridedView(rand(T, dims))
+        for f2 in (identity, conj, adjoint, transpose), f1 in (identity, conj, transpose, adjoint)
+            axes(f1(A1)) == axes(f2(A2)) || continue
+            B1 = f1(copy(A1))
+            B2 = f2(copy(A2))
+            @test compare((x, y) -> copy!(y, x), AT, B1, B2)
+        end
     end
 end
 
