@@ -58,11 +58,20 @@ end
     A2 = permutedims(StridedView(rand(T, dims)), randperm(N))
     A3 = permutedims(StridedView(rand(T, dims)), randperm(N))
     @test compare((C, A, B) -> mul!(C, A, B, α, β), AT, A1, A2, A3)
+    # test BLAS for all op combinations
+    @testset for sz in ((32, 64), (64, 64), (64, 32))
+        vA1 = view(StridedView(rand(T, sz)), 1:32, 1:32)
+        vA2 = view(StridedView(rand(T, sz)), 1:32, 1:32)
+        vA3 = view(StridedView(rand(T, sz)), 1:32, 1:32)
+        @testset for f1 in (identity, conj, adjoint, transpose), f2 in (identity, conj, adjoint, transpose)
+            @test compare((C, A, B) -> mul!(C, A, B, α, β), AT, vA1, f1(vA2), f2(vA3))
+        end
+    end
     # non-BLAS fallback path
     vA1 = view(StridedView(rand(T, (32, 32))), 1:32, 1:32)
     vA2 = view(StridedView(rand(T, (32, 64))), 1:32, 1:2:64)
     vA3 = view(StridedView(rand(T, (64, 32))), 1:2:64, 1:32)
-    for f1 in (identity, conj, adjoint, transpose), f2 in (identity, conj, adjoint, transpose)
+    @testset for f1 in (identity, conj, adjoint, transpose), f2 in (identity, conj, adjoint, transpose)
         @test compare((C, A, B) -> mul!(C, A, B, α, β), AT, vA1, f1(vA2), f2(vA3))
     end
     # non-BLAS fallback path

@@ -133,9 +133,12 @@ end
 
 function Strided.isblasmatrix(A::GPUStridedView{T, 2}) where {T <: LinearAlgebra.BlasFloat}
     if A.op == identity
-        return stride(A, 1) == 1 || stride(A, 2) == 1
+        # unsafe wrap approach doesn't work if second condition not met
+        return stride(A, 1) == 1 && size(A, 1) == size(parent(A), 1)
     elseif A.op == conj
-        return stride(A, 2) == 1
+        # this is converted to adjoint
+        # unsafe wrap approach doesn't work if second condition not met
+        return stride(A, 2) == 1 && size(A, 2) == size(parent(A), 2)
     else # should never happen
         return false
     end
