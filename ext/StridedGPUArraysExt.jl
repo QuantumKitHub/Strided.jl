@@ -108,7 +108,7 @@ end
 @static if VERSION < v"1.11.0-rc"
     function substitute_ops(ops)
         # work around compiler issue on AMD on 1.10
-        f_conj(x) = real(x)-imag(x)*im
+        f_conj(x) = real(x) - imag(x) * im
         return map(ops) do op
             if op == conj
                 return f_conj
