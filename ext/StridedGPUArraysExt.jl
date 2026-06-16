@@ -105,6 +105,22 @@ function Strided._mapreduce(
     return Array(out)[1]
 end
 
+@static if VERSION < v"1.11.0-rc"
+    function substitute_ops(ops)
+        # work around compiler issue on AMD on 1.10
+        f_conj(x) = real(x)-imag(x)*im
+        return map(ops) do op
+            if op == conj
+                return f_conj
+            else
+                return op
+            end
+        end
+    end
+else
+    substitute_ops(ops) = ops
+end
+
 function Strided._mapreduce_block!(
         f, op, initop,
         dims::Dims{N},
@@ -125,9 +141,8 @@ function Strided._mapreduce_block!(
 
     backend = KernelAbstractions.get_backend(parent(out))
     kernel! = _mapreduce_gpu_kernel!(backend)
-    ops = getproperty.(arrays, :op)
+    ops = substitute_ops(getproperty.(arrays, :op))
     kernel!(f, op, initop, dims_red, strides, offsets, ops, parent.(arrays); ndrange = dims_out)
-
     return nothing
 end
 
