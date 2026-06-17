@@ -14,7 +14,7 @@ Base.fill!(A::StridedView, val) = map!(Returns(val), A, A)
 # It should be removed as soon as the underlying
 # compilation problem is resolved. It uses the first
 # argument to dispatch so that only AMD arrays are affected.
-substitute_op(::Type{<:StridedView}, op) = op
+_get_op(A::StridedView) = A.op
 
 function Base.mapreduce(f, op, A::StridedView; dims = :, kw...)
     return Base._mapreduce_dim(f, op, values(kw), A, dims)

@@ -1,7 +1,7 @@
 module StridedAMDGPUExt
 
 using Strided, StridedViews, AMDGPU, AMDGPU.rocBLAS, LinearAlgebra
-import Strided: blas_mul!, substitute_op
+import Strided: blas_mul!, _get_op
 
 const ROCStridedView{T, N, A <: ROCArray{T}} = StridedViews.StridedView{T, N, A}
 
@@ -18,12 +18,10 @@ end
 
 _conj(x) = real(x) - imag(x) * im
 @static if VERSION < v"1.11.0-rc"
-    function substitute_op(::Type{<:ROCStridedView}, op)
-        # work around compiler issue on AMD on 1.10
-        return op == conj ? _conj : op
-    end
+    # work around compiler issue on AMD on 1.10
+    _get_op(A::ROCStridedView) = A.op == conj ? _conj : A.op
 else
-    substitute_op(::Type{<:ROCStridedView}, op) = op
+    _get_op(A::ROCStridedView) = A.op
 end
 
 end
