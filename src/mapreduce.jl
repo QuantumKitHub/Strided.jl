@@ -7,6 +7,15 @@ LinearAlgebra.transpose!(C::StridedView, A::StridedView) = copy!(C, transpose(A)
 Base.permutedims!(dst::StridedView, src::StridedView, p) = copy!(dst, permutedims(src, p))
 Base.fill!(A::StridedView, val) = map!(Returns(val), A, A)
 
+# This is a wrapper function intended to allow us to
+# intercept "conj" and rewrite it in cases where the
+# GPU compiler seemingly isn't compiling bare conj
+# correctly (https://github.com/QuantumKitHub/Strided.jl/issues/63).
+# It should be removed as soon as the underlying
+# compilation problem is resolved. It uses the first
+# argument to dispatch so that only AMD arrays are affected.
+_get_op(A::StridedView) = A.op
+
 function Base.mapreduce(f, op, A::StridedView; dims = :, kw...)
     return Base._mapreduce_dim(f, op, values(kw), A, dims)
 end

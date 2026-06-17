@@ -5,7 +5,7 @@ using GPUArrays: Adapt, KernelAbstractions
 using GPUArrays.KernelAbstractions: @kernel, @index
 using StridedViews: ParentIndex
 
-import Strided: isblasmatrix
+import Strided: isblasmatrix, _get_op
 
 ALL_FS = Union{typeof(adjoint), typeof(conj), typeof(identity), typeof(transpose)}
 
@@ -125,9 +125,8 @@ function Strided._mapreduce_block!(
 
     backend = KernelAbstractions.get_backend(parent(out))
     kernel! = _mapreduce_gpu_kernel!(backend)
-    ops = getproperty.(arrays, :op)
+    ops = _get_op.(arrays)
     kernel!(f, op, initop, dims_red, strides, offsets, ops, parent.(arrays); ndrange = dims_out)
-
     return nothing
 end
 
