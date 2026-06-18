@@ -264,10 +264,6 @@ end
     return _mapreduce_kernel_expr(f, op, initop, N, M)
 end
 
-# Build the body of `_mapreduce_kernel!` as an `Expr`. Split out from the
-# `@generated` function so the generation logic is a plain function. `f`, `op`,
-# `initop` are the *types* of the corresponding arguments (as seen inside
-# `@generated`); `N`/`M` are the ndims / number of arrays.
 function _mapreduce_kernel_expr(f, op, initop, N::Int, M::Int)
 
     # many variables
