@@ -1,0 +1,3 @@
+[deps]
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+Strided = "5e0ebb24-38b0-5f93-81fe-25c709ecae67"

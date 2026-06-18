@@ -33,17 +33,17 @@ function Base._mapreduce_dim(f, op, ::NamedTuple{()}, A::StridedView, dims)
 end
 
 function Base.map(
-        f::F, a1::StridedView{<:Any, N},
+        @nospecialize(f), a1::StridedView{<:Any, N},
         A::Vararg{StridedView{<:Any, N}}
-    ) where {F, N}
+    ) where {N}
     T = Base.promote_eltype(a1, A...)
     return map!(f, similar(a1, T), a1, A...)
 end
 
 function Base.map!(
-        f::F, b::StridedView{<:Any, N}, a1::StridedView{<:Any, N},
+        @nospecialize(f), b::StridedView{<:Any, N}, a1::StridedView{<:Any, N},
         A::Vararg{StridedView{<:Any, N}}
-    ) where {F, N}
+    ) where {N}
     dims = size(b)
 
     # Check dimesions
@@ -59,7 +59,7 @@ function Base.map!(
     return b
 end
 
-function _mapreduce(f, op, A::StridedView{T}, nt = nothing) where {T}
+function _mapreduce(@nospecialize(f), @nospecialize(op), A::StridedView{T}, nt = nothing) where {T}
     if isempty(A)
         b = Base.mapreduce_empty(f, op, T)
         return nt === nothing ? b : op(b, nt.init)
@@ -79,7 +79,7 @@ function _mapreduce(f, op, A::StridedView{T}, nt = nothing) where {T}
 end
 
 function Base.mapreducedim!(
-        f, op, b::StridedView{<:Any, N},
+        @nospecialize(f), @nospecialize(op), b::StridedView{<:Any, N},
         a1::StridedView{<:Any, N},
         A::Vararg{StridedView{<:Any, N}}
     ) where {N}
@@ -93,7 +93,7 @@ function Base.mapreducedim!(
 end
 
 function _mapreducedim!(
-        (f), (op), (initop),
+        @nospecialize(f), @nospecialize(op), @nospecialize(initop),
         dims::Dims, arrays::Tuple{Vararg{StridedView}}
     )
     if any(isequal(0), dims)
@@ -106,8 +106,40 @@ function _mapreducedim!(
     return arrays[1]
 end
 
+# ---------------------------------------------------------------------------
+# Bookkeeping: dimension fusion, loop-order selection and cache blocking.
+#
+# `_mapreduce_fuse!`, `_mapreduce_order!`, `_mapreduce_block!` and
+# `_computeblocks` set up the mapreduce: they fuse contiguous dimensions, sort
+# the loop order by cache-importance, and compute cache blocks. None of this
+# logic depends on *what* the map/reduce functions are, only on the array shapes
+# and strides, so `f`/`op`/`initop` are `@nospecialize`d and merely forwarded.
+#
+# This matters for precompilation. The functions themselves are the dominant
+# axis of the specialization explosion: a workload that calls mapreduce with
+# many distinct ops (as TensorOperations does) otherwise forces a fresh
+# compilation of this entire bookkeeping chain per (op, eltype) combination.
+# With `@nospecialize`, the bookkeeping specializes on the array-shape signature
+# (ndims `N`, number of arrays `M`, eltypes) but no longer on the ops, so a
+# precompile workload can compile it once per shape signature and reuse it
+# across every op. The bookkeeping runs once per mapreduce call (coarse
+# granularity), so erasing the op types here is free at runtime.
+#
+# NOTE: the per-array data is deliberately kept as `Tuple`s (`map(strides, …)`,
+# `map(offset, …)`, …) rather than `Vector`s. Tuples stay stack-allocated, which
+# keeps the fixed per-call overhead low — important for small arrays. A variant
+# that carried this data in `M`-erased `Vector`s (so the bookkeeping specialized
+# purely on `N`) was prototyped and rejected: it roughly doubled the small-array
+# call overhead through heap allocation and dynamic dispatch, for only a small
+# extra reduction in compile time over `@nospecialize` alone. The number of
+# remaining method specializations was in fact identical, because both are
+# bounded by the distinct `arrays` tuple types in the workload (the `@generated`
+# kernel genuinely needs that concrete type); erasing it further requires a
+# dynamic-dispatch barrier whose runtime cost was not worth it.
+# ---------------------------------------------------------------------------
+
 function _mapreduce_fuse!(
-        (f), (op), (initop),
+        @nospecialize(f), @nospecialize(op), @nospecialize(initop),
         dims::Dims, arrays::Tuple{Vararg{StridedView}}
     )
     # Fuse dimensions if possible: assume that at least one array, e.g. the output array in
@@ -130,7 +162,7 @@ function _mapreduce_fuse!(
 end
 
 function _mapreduce_order!(
-        (f), (op), (initop),
+        @nospecialize(f), @nospecialize(op), @nospecialize(initop),
         dims, strides, arrays
     )
     M = length(arrays)
@@ -155,15 +187,12 @@ end
 
 const MINTHREADLENGTH = 1 << 15 # minimal length before any kind of threading is applied
 function _mapreduce_block!(
-        (f), (op), (initop),
+        @nospecialize(f), @nospecialize(op), @nospecialize(initop),
         dims, strides, offsets, costs, arrays
     )
     bytestrides = map((s, stride) -> s .* stride, sizeof.(eltype.(arrays)), strides)
     strideorders = map(indexorder, strides)
     blocks = _computeblocks(dims, costs, bytestrides, strideorders)
-
-    # t = @elapsed _computeblocks(dims, costs, bytestrides, strideorders)
-    # println("_computeblocks time: $t")
 
     if get_num_threads() == 1 || prod(dims) <= MINTHREADLENGTH
         _mapreduce_kernel!(f, op, initop, dims, blocks, arrays, strides, offsets)
@@ -214,7 +243,7 @@ end
 # nthreads: number of threads spacing: extra addition to offset of array 1, to account for
 # reduction
 function _mapreduce_threaded!(
-        (f), (op), (initop),
+        @nospecialize(f), @nospecialize(op), @nospecialize(initop),
         dims, blocks, strides, offsets, costs, arrays, nthreads,
         spacing, taskindex
     )
