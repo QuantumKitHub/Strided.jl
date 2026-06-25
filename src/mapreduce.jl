@@ -340,13 +340,9 @@ function _mapreduce_kernel_expr(f, op, initop, N::Int, M::Int)
         outerreturnstrideex[i] = returnex
     end
 
-    # Unit-stride fast path for the innermost (vectorized) loop dimension. The strides are
-    # runtime values, so even when the data is contiguous the compiler cannot prove unit
-    # stride and falls back to gather/scatter SIMD (which does not stream memory). When every
-    # array is contiguous along loop dimension 1 we instead step the parent indices by the
-    # literal `1`, letting the compiler emit contiguous SIMD loads/stores — up to ~3x faster
-    # for contiguous data. The post-loop index correction reuses the regular return-stride
-    # expressions, which are numerically identical here because the stride equals 1.
+    # Unit-stride fast path for the innermost (vectorized) loop dimension.
+    # We special-case for contiguous loads/stores to avoid SIMD gather/scatter
+    # in favor of SIMD load/store, which streams memory more efficiently.
     unitstep1ex = :($(Ivars[1]) += 1)
     unitstep2ex = Expr(:block)
     for j in 2:M
