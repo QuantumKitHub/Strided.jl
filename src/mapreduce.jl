@@ -348,10 +348,8 @@ function _mapreduce_kernel_expr(f, op, initop, N::Int, M::Int)
     for j in 2:M
         push!(unitstep2ex.args, :($(Ivars[j]) += 1))
     end
-    unitstridecond = reduce(
-        (a, b) -> :($a && $b),
-        [:($(stridevars[1, j]) == 1) for j in 1:M]
-    )
+    firststrides = Expr(:tuple, (stridevars[1, j] for j in 1:M)...)
+    unitstridecond = :(all(==(1), $firststrides))
 
     if op == Nothing
         ex = Expr(:(=), lhsex, fcallex)
