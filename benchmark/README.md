@@ -1,7 +1,7 @@
 # Strided.jl benchmarks
 
 This directory contains a [BenchmarkTools.jl](https://github.com/JuliaCI/BenchmarkTools.jl) suite (`benchmarks.jl`, defining `SUITE`) for the `permutedims!` machinery, in the format expected by [AirSpeedVelocity.jl](https://github.com/MilesCranmer/AirSpeedVelocity.jl) and PkgBenchmark.jl.
-See the header of `benchmarks.jl` for the case selection.
+The benchmark cases are defined in `cases.toml` (see its comments for the format and the provenance of the default groups); a different cases file can be passed with `--cases`.
 
 ## Running manually
 
