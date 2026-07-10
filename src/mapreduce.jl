@@ -351,40 +351,63 @@ function _mapreduce_kernel_expr(f, op, initop, N::Int, M::Int)
     firststrides = Expr(:tuple, (stridevars[1, j] for j in 1:M)...)
     unitstridecond = :(all(==(1), $firststrides))
 
+    i = 1
     if op == Nothing
+        # Non-reducing (map!/permute/...): each destination element is written once,
+        # so skip the reduction-only `iszero` hoist below and emit just the
+        # unit-stride and generic `@simd` loops.
         ex = Expr(:(=), lhsex, fcallex)
-        exa = Expr(:(=), :a, fcallex)
+        if N >= 1
+            ex = quote
+                if $unitstridecond
+                    @simd for $(innerloopvars[i]) in Base.OneTo($(blockdimvars[i]))
+                        $ex
+                        $unitstep1ex
+                        $unitstep2ex
+                    end
+                    $(returnstride1ex[i])
+                    $(returnstride2ex[i])
+                else
+                    @simd for $(innerloopvars[i]) in Base.OneTo($(blockdimvars[i]))
+                        $ex
+                        $(stepstride1ex[i])
+                        $(stepstride2ex[i])
+                    end
+                    $(returnstride1ex[i])
+                    $(returnstride2ex[i])
+                end
+            end
+        end
     else
         ex = Expr(:(=), lhsex, Expr(:call, :op, lhsex, fcallex))
         exa = Expr(:(=), :a, Expr(:call, :op, :a, fcallex))
-    end
-    i = 1
-    if N >= 1
-        ex = quote
-            if iszero($(stridevars[1, 1])) # explicitly hoist A1[I1] out of loop
-                a = $lhsex
-                @simd for $(innerloopvars[i]) in Base.OneTo($(blockdimvars[i]))
-                    $exa
-                    $(stepstride2ex[i])
+        if N >= 1
+            ex = quote
+                if iszero($(stridevars[1, 1])) # explicitly hoist A1[I1] out of loop
+                    a = $lhsex
+                    @simd for $(innerloopvars[i]) in Base.OneTo($(blockdimvars[i]))
+                        $exa
+                        $(stepstride2ex[i])
+                    end
+                    $lhsex = a
+                    $(returnstride2ex[i])
+                elseif $unitstridecond
+                    @simd for $(innerloopvars[i]) in Base.OneTo($(blockdimvars[i]))
+                        $ex
+                        $unitstep1ex
+                        $unitstep2ex
+                    end
+                    $(returnstride1ex[i])
+                    $(returnstride2ex[i])
+                else
+                    @simd for $(innerloopvars[i]) in Base.OneTo($(blockdimvars[i]))
+                        $ex
+                        $(stepstride1ex[i])
+                        $(stepstride2ex[i])
+                    end
+                    $(returnstride1ex[i])
+                    $(returnstride2ex[i])
                 end
-                $lhsex = a
-                $(returnstride2ex[i])
-            elseif $unitstridecond
-                @simd for $(innerloopvars[i]) in Base.OneTo($(blockdimvars[i]))
-                    $ex
-                    $unitstep1ex
-                    $unitstep2ex
-                end
-                $(returnstride1ex[i])
-                $(returnstride2ex[i])
-            else
-                @simd for $(innerloopvars[i]) in Base.OneTo($(blockdimvars[i]))
-                    $ex
-                    $(stepstride1ex[i])
-                    $(stepstride2ex[i])
-                end
-                $(returnstride1ex[i])
-                $(returnstride2ex[i])
             end
         end
     end
