@@ -1,154 +1,77 @@
-# Benchmark cases for benchmarks.jl. Each group carries its BenchmarkTools
-# sampling parameters and a list of cases, where `p` is the permutation and
-# `size` the input size (so the output has size `size[p]`).
+# Benchmark cases for benchmarks.jl.
+#
+# Each case is a permutation applied to an array whose *shape* (the ratio of its
+# dimensions) is fixed while its *total length* is swept, so a case can be
+# compared against a plain memory copy of the same length (the auto-generated
+# "copy" group) to get a machine-independent efficiency. Dimensions are derived
+# from `shape` and each `total` as d_i = round(s_i * (total / prod(s))^(1/N)),
+# so the realized length is approximately (not exactly) `total`.
+#
+# [group] fields:
+#   samples, seconds   BenchmarkTools budget (per case; `seconds` caps the big
+#                      cases, evals stabilize the tiny ones)
+#   totals             list of target element counts to sweep
+#   cases              list of cases, each a table with:
+#       p              1-based permutation (output axis i comes from input p[i])
+#       shape          relative dimension ratios, length N == length(p)
+#                      (alternatively `size` for explicit dims, ignoring totals)
+#       stride_in      optional per-input-axis extent multiplier (default all 1)
+#       stride_out     optional per-output-axis extent multiplier (default all 1)
+#                      A multiplier > 1 makes the array a non-contiguous strided
+#                      view: a leading >1 gives a non-unit innermost stride, a
+#                      later >1 gives gaps between higher dimensions.
 
-# The reference benchmark of HPTT / the TTC paper, reproduced verbatim at the
-# original (large, bandwidth-bound) sizes, with the 0-based permutations
-# translated to 1-based:
-# https://github.com/springer13/hptt/blob/master/benchmark/benchmark.sh
-# Each permutation comes in three size variants: balanced dims, large first
-# dim, large last dim.
-[hptt]
-samples = 10
-seconds = 10
+# Balanced shapes (all dimensions equal) across ranks 2-6, plus a couple of
+# non-reversing permutations. The bandwidth-bound baseline for the transpose.
+[balanced]
+samples = 100
+seconds = 5
+totals = [1024, 32768, 1048576, 8388608, 67108864]
 cases = [
-    { p = [2, 1], size = [7264, 7264] },
-    { p = [2, 1], size = [43408, 1216] },
-    { p = [2, 1], size = [1216, 43408] },
-    { p = [1, 3, 2], size = [368, 384, 384] },
-    { p = [1, 3, 2], size = [2144, 64, 384] },
-    { p = [1, 3, 2], size = [368, 64, 2307] },
-    { p = [2, 1, 3], size = [384, 384, 355] },
-    { p = [2, 1, 3], size = [2320, 384, 59] },
-    { p = [2, 1, 3], size = [384, 2320, 59] },
-    { p = [3, 2, 1], size = [384, 355, 384] },
-    { p = [3, 2, 1], size = [2320, 59, 384] },
-    { p = [3, 2, 1], size = [384, 59, 2320] },
-    { p = [1, 4, 3, 2], size = [80, 96, 75, 96] },
-    { p = [1, 4, 3, 2], size = [464, 16, 75, 96] },
-    { p = [1, 4, 3, 2], size = [80, 16, 75, 582] },
-    { p = [3, 2, 4, 1], size = [96, 75, 96, 75] },
-    { p = [3, 2, 4, 1], size = [608, 12, 96, 75] },
-    { p = [3, 2, 4, 1], size = [96, 12, 608, 75] },
-    { p = [3, 1, 4, 2], size = [96, 75, 96, 75] },
-    { p = [3, 1, 4, 2], size = [608, 12, 96, 75] },
-    { p = [3, 1, 4, 2], size = [96, 12, 608, 75] },
-    { p = [2, 1, 4, 3], size = [96, 96, 75, 75] },
-    { p = [2, 1, 4, 3], size = [608, 96, 12, 75] },
-    { p = [2, 1, 4, 3], size = [96, 608, 12, 75] },
-    { p = [4, 3, 2, 1], size = [96, 75, 75, 96] },
-    { p = [4, 3, 2, 1], size = [608, 12, 75, 96] },
-    { p = [4, 3, 2, 1], size = [96, 12, 75, 608] },
-    { p = [1, 5, 3, 2, 4], size = [32, 48, 28, 28, 48] },
-    { p = [1, 5, 3, 2, 4], size = [176, 8, 28, 28, 48] },
-    { p = [1, 5, 3, 2, 4], size = [32, 8, 28, 28, 298] },
-    { p = [4, 3, 2, 5, 1], size = [48, 28, 28, 48, 28] },
-    { p = [4, 3, 2, 5, 1], size = [352, 4, 28, 48, 28] },
-    { p = [4, 3, 2, 5, 1], size = [48, 4, 28, 352, 28] },
-    { p = [3, 1, 5, 2, 4], size = [48, 28, 48, 28, 28] },
-    { p = [3, 1, 5, 2, 4], size = [352, 4, 48, 28, 28] },
-    { p = [3, 1, 5, 2, 4], size = [48, 4, 352, 28, 28] },
-    { p = [2, 4, 1, 5, 3], size = [48, 48, 28, 28, 28] },
-    { p = [2, 4, 1, 5, 3], size = [352, 48, 4, 28, 28] },
-    { p = [2, 4, 1, 5, 3], size = [48, 352, 4, 28, 28] },
-    { p = [5, 4, 3, 2, 1], size = [48, 28, 28, 28, 48] },
-    { p = [5, 4, 3, 2, 1], size = [352, 4, 28, 28, 48] },
-    { p = [5, 4, 3, 2, 1], size = [48, 4, 28, 28, 352] },
-    { p = [1, 4, 3, 6, 5, 2], size = [16, 32, 15, 32, 15, 15] },
-    { p = [1, 4, 3, 6, 5, 2], size = [48, 10, 15, 32, 15, 15] },
-    { p = [1, 4, 3, 6, 5, 2], size = [16, 10, 15, 103, 15, 15] },
-    { p = [4, 3, 1, 6, 2, 5], size = [32, 15, 15, 32, 15, 15] },
-    { p = [4, 3, 1, 6, 2, 5], size = [112, 5, 15, 32, 15, 15] },
-    { p = [4, 3, 1, 6, 2, 5], size = [32, 5, 15, 112, 15, 15] },
-    { p = [3, 1, 5, 2, 6, 4], size = [32, 15, 32, 15, 15, 15] },
-    { p = [3, 1, 5, 2, 6, 4], size = [112, 5, 32, 15, 15, 15] },
-    { p = [3, 1, 5, 2, 6, 4], size = [32, 5, 112, 15, 15, 15] },
-    { p = [4, 3, 6, 2, 1, 5], size = [32, 15, 15, 32, 15, 15] },
-    { p = [4, 3, 6, 2, 1, 5], size = [112, 5, 15, 32, 15, 15] },
-    { p = [4, 3, 6, 2, 1, 5], size = [32, 5, 15, 112, 15, 15] },
-    { p = [6, 5, 4, 3, 2, 1], size = [32, 15, 15, 15, 15, 32] },
-    { p = [6, 5, 4, 3, 2, 1], size = [112, 5, 15, 15, 15, 32] },
-    { p = [6, 5, 4, 3, 2, 1], size = [32, 5, 15, 15, 15, 112] },
+    { p = [2, 1],             shape = [1, 1] },
+    { p = [3, 2, 1],          shape = [1, 1, 1] },
+    { p = [2, 3, 1],          shape = [1, 1, 1] },
+    { p = [4, 3, 2, 1],       shape = [1, 1, 1, 1] },
+    { p = [3, 4, 1, 2],       shape = [1, 1, 1, 1] },
+    { p = [5, 4, 3, 2, 1],    shape = [1, 1, 1, 1, 1] },
+    { p = [6, 5, 4, 3, 2, 1], shape = [1, 1, 1, 1, 1, 1] },
 ]
 
-# Small to medium sizes, including the permutation cases of strided-rs
-# (https://github.com/tensor4all/strided-rs), to track per-call overhead,
-# dispatch cost, and the non-threaded fast paths.
-[small]
-samples = 1000
+# Skewed shapes: one dimension much larger than the rest, either leading (fat
+# first axis) or trailing (fat last axis), as in the HPTT/TTC reference set.
+[skewed]
+samples = 100
 seconds = 5
+totals = [1024, 32768, 1048576, 8388608, 67108864]
 cases = [
-    { p = [2, 1], size = [16, 16] },
-    { p = [2, 1], size = [64, 64] },
-    { p = [2, 1], size = [256, 256] },
-    { p = [2, 1], size = [1000, 1000] },
-    { p = [2, 1], size = [4000, 4000] },
-    { p = [3, 2, 1], size = [16, 16, 16] },
-    { p = [3, 2, 1], size = [64, 64, 64] },
-    { p = [2, 3, 1], size = [16, 16, 16] },
-    { p = [2, 3, 1], size = [64, 64, 64] },
-    { p = [4, 3, 2, 1], size = [8, 8, 8, 8] },
-    { p = [4, 3, 2, 1], size = [16, 16, 16, 16] },
-    { p = [4, 3, 2, 1], size = [32, 32, 32, 32] },
-    { p = [2, 1, 4, 3], size = [8, 8, 8, 8] },
-    { p = [2, 1, 4, 3], size = [16, 16, 16, 16] },
-    { p = [2, 1, 4, 3], size = [32, 32, 32, 32] },
-    { p = [3, 4, 1, 2], size = [8, 8, 8, 8] },
-    { p = [3, 4, 1, 2], size = [16, 16, 16, 16] },
-    { p = [3, 4, 1, 2], size = [32, 32, 32, 32] },
-    { p = [2, 3, 4, 1], size = [8, 8, 8, 8] },
-    { p = [2, 3, 4, 1], size = [16, 16, 16, 16] },
-    { p = [2, 3, 4, 1], size = [32, 32, 32, 32] },
+    { p = [2, 1],             shape = [32, 1] },
+    { p = [2, 1],             shape = [1, 32] },
+    { p = [3, 2, 1],          shape = [16, 1, 1] },
+    { p = [3, 2, 1],          shape = [1, 1, 16] },
+    { p = [4, 3, 2, 1],       shape = [8, 1, 1, 1] },
+    { p = [4, 3, 2, 1],       shape = [1, 1, 1, 8] },
+    { p = [6, 5, 4, 3, 2, 1], shape = [8, 1, 1, 1, 1, 1] },
+    { p = [6, 5, 4, 3, 2, 1], shape = [1, 1, 1, 1, 1, 8] },
 ]
 
-# Sizes that are not multiples of the SIMD vector width: powers of two +- 1,
-# primes, and mixed odd/rectangular shapes. These defeat aligned vectorization
-# and exercise the vector-remainder loops and blocking edge cases that the
-# power-of-two sizes of the other groups never hit.
-[unaligned]
-samples = 1000
+# Truly strided views: the input or output is a non-contiguous slice of a larger
+# buffer. `stride_in/out = [2, 1, ...]` gives a non-unit innermost stride (the
+# strongly non-contiguous case that defeats the unit-stride fast path);
+# `[1, 2, ...]` keeps the innermost dimension contiguous but adds a gap between
+# successive second-axis slices.
+[strided]
+samples = 100
 seconds = 5
+totals = [1024, 32768, 1048576, 8388608, 67108864]
 cases = [
-    { p = [2, 1], size = [17, 17] },
-    { p = [2, 1], size = [63, 63] },
-    { p = [2, 1], size = [129, 129] },
-    { p = [2, 1], size = [251, 251] },
-    { p = [2, 1], size = [999, 1001] },
-    { p = [2, 1], size = [1021, 1021] },
-    { p = [3, 2, 1], size = [15, 15, 15] },
-    { p = [3, 2, 1], size = [17, 17, 17] },
-    { p = [3, 2, 1], size = [63, 63, 63] },
-    { p = [3, 2, 1], size = [65, 65, 65] },
-    { p = [3, 2, 1], size = [31, 32, 33] },
-    { p = [3, 2, 1], size = [37, 61, 89] },
-    { p = [2, 3, 1], size = [15, 15, 15] },
-    { p = [2, 3, 1], size = [17, 17, 17] },
-    { p = [2, 3, 1], size = [63, 63, 63] },
-    { p = [2, 3, 1], size = [65, 65, 65] },
-    { p = [2, 3, 1], size = [31, 32, 33] },
-    { p = [2, 3, 1], size = [37, 61, 89] },
-    { p = [4, 3, 2, 1], size = [7, 7, 7, 7] },
-    { p = [4, 3, 2, 1], size = [9, 9, 9, 9] },
-    { p = [4, 3, 2, 1], size = [15, 15, 15, 15] },
-    { p = [4, 3, 2, 1], size = [17, 17, 17, 17] },
-    { p = [4, 3, 2, 1], size = [31, 31, 31, 31] },
-    { p = [4, 3, 2, 1], size = [33, 33, 33, 33] },
-    { p = [2, 1, 4, 3], size = [7, 7, 7, 7] },
-    { p = [2, 1, 4, 3], size = [9, 9, 9, 9] },
-    { p = [2, 1, 4, 3], size = [15, 15, 15, 15] },
-    { p = [2, 1, 4, 3], size = [17, 17, 17, 17] },
-    { p = [2, 1, 4, 3], size = [31, 31, 31, 31] },
-    { p = [2, 1, 4, 3], size = [33, 33, 33, 33] },
-    { p = [3, 4, 1, 2], size = [7, 7, 7, 7] },
-    { p = [3, 4, 1, 2], size = [9, 9, 9, 9] },
-    { p = [3, 4, 1, 2], size = [15, 15, 15, 15] },
-    { p = [3, 4, 1, 2], size = [17, 17, 17, 17] },
-    { p = [3, 4, 1, 2], size = [31, 31, 31, 31] },
-    { p = [3, 4, 1, 2], size = [33, 33, 33, 33] },
-    { p = [2, 3, 4, 1], size = [7, 7, 7, 7] },
-    { p = [2, 3, 4, 1], size = [9, 9, 9, 9] },
-    { p = [2, 3, 4, 1], size = [15, 15, 15, 15] },
-    { p = [2, 3, 4, 1], size = [17, 17, 17, 17] },
-    { p = [2, 3, 4, 1], size = [31, 31, 31, 31] },
-    { p = [2, 3, 4, 1], size = [33, 33, 33, 33] },
+    { p = [2, 1],       shape = [1, 1],       stride_in  = [2, 1] },
+    { p = [2, 1],       shape = [1, 1],       stride_in  = [1, 2] },
+    { p = [2, 1],       shape = [1, 1],       stride_out = [2, 1] },
+    { p = [2, 1],       shape = [1, 1],       stride_out = [1, 2] },
+    { p = [3, 2, 1],    shape = [1, 1, 1],    stride_in  = [2, 1, 1] },
+    { p = [3, 2, 1],    shape = [1, 1, 1],    stride_in  = [1, 2, 1] },
+    { p = [3, 2, 1],    shape = [1, 1, 1],    stride_out = [2, 1, 1] },
+    { p = [4, 3, 2, 1], shape = [1, 1, 1, 1], stride_in  = [2, 1, 1, 1] },
+    { p = [4, 3, 2, 1], shape = [1, 1, 1, 1], stride_in  = [1, 2, 1, 1] },
+    { p = [4, 3, 2, 1], shape = [1, 1, 1, 1], stride_out = [2, 1, 1, 1] },
 ]

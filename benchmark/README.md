@@ -1,7 +1,12 @@
 # Strided.jl benchmarks
 
 This directory contains a [BenchmarkTools.jl](https://github.com/JuliaCI/BenchmarkTools.jl) suite (`benchmarks.jl`, defining `SUITE`) for the `permutedims!` machinery, in the format expected by [AirSpeedVelocity.jl](https://github.com/MilesCranmer/AirSpeedVelocity.jl) and PkgBenchmark.jl.
-The benchmark cases are defined in `cases.toml` (see its comments for the format and the provenance of the default groups); a different cases file can be passed with `--cases`.
+
+Each case fixes a *shape* (dimension ratios) and a *permutation* and is swept over a list of total lengths, so its time can be divided by that of a plain memory copy of the same length — the auto-generated `copy` group — to get a machine-independent efficiency (`≥ 1`, approaching `1` when bandwidth-bound).
+The default groups (`balanced`, `skewed`, `strided`) live in `cases.toml`; the `strided` group makes the input/output non-contiguous strided views to exercise the paths a dense array never hits.
+See the comments in `cases.toml` for the format; a different cases file can be passed with `--cases`.
+
+The copy baseline is single-threaded, so multi-threaded permutation ratios are relative to a single-threaded memory copy.
 
 ## Running manually
 
@@ -11,7 +16,7 @@ The benchmark cases are defined in `cases.toml` (see its comments for the format
 julia --project=benchmark benchmark/benchmarks.jl --help
 julia --project=benchmark -t 8 \
     -e 'include("benchmark/benchmarks.jl"); display(run(SUITE; verbose=true))' \
-    -- -g small -T Float64 -f sz=1000
+    -- -g balanced -T Float64 -f L=1048576
 ```
 
 The first use requires instantiating the environment:
@@ -21,7 +26,7 @@ julia --project=benchmark -e 'using Pkg; Pkg.develop(path="."); Pkg.instantiate(
 ```
 
 Multithreaded variants are generated only when Julia is started with more than one thread (`-t` / `JULIA_NUM_THREADS`).
-The full unfiltered grid (57 HPTT cases + 21 small cases + 42 unaligned cases, × 2 element types × 2 thread counts) takes on the order of an hour.
+The full unfiltered grid takes on the order of an hour; restrict it with `-g`/`-T`/`-n`/`-f` (or `benchpkg --filter`).
 
 ## Comparing revisions with AirSpeedVelocity
 
