@@ -94,10 +94,10 @@ else
 end
 
 # Column-major strides of a dense array of size `sz`.
-colstrides(sz::NTuple{N,Int}) where {N} = ntuple(i -> prod(ntuple(j -> sz[j], i - 1)), N)
+colstrides(sz::NTuple{N, Int}) where {N} = ntuple(i -> prod(ntuple(j -> sz[j], i - 1)), N)
 
 # Dimensions realizing (approximately) `total` elements at the given shape ratio.
-function shapedims(shape::NTuple{N,<:Real}, total::Int) where {N}
+function shapedims(shape::NTuple{N, <:Real}, total::Int) where {N}
     c = (total / prod(shape))^(1 / N)
     return ntuple(i -> max(1, round(Int, shape[i] * c)), N)
 end
@@ -106,7 +106,7 @@ end
 # freshly allocated (page-faulted) backing buffer. `mult` all ones gives a dense
 # view (the unit-stride fast path); a leading value > 1 gives a non-unit
 # innermost stride, a later value > 1 gives gaps between higher dimensions.
-function make_view(::Type{T}, sz::NTuple{N,Int}, mult::NTuple{N,Int}) where {T,N}
+function make_view(::Type{T}, sz::NTuple{N, Int}, mult::NTuple{N, Int}) where {T, N}
     all(isone, mult) && return StridedView(rand(T, sz))
     bufsz = ntuple(i -> sz[i] * mult[i], N)
     strides = ntuple(i -> mult[i] * colstrides(bufsz)[i], N)
