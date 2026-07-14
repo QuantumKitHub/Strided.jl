@@ -52,7 +52,7 @@ Base.dotview(a::StridedView{<:Any, N}, I::Vararg{SliceIndex, N}) where {N} = get
     # promote StridedView to have same size, by giving artificial zero strides
     stridedargs = promoteshape(dims, capturestridedargs(bc)...)
     c = make_capture(bc)
-    _mapreduce_fuse!(c, nothing, nothing, dims, (dest, stridedargs...))
+    _mapreduce_order!(c, nothing, nothing, dims, (dest, stridedargs...))
     return dest
 end
 

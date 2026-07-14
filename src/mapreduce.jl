@@ -54,7 +54,7 @@ function Base.map!(
 
     any(isequal(0), dims) && return b # don't do anything
 
-    _mapreduce_fuse!(f, nothing, nothing, dims, (b, a1, A...))
+    _mapreduce_order!(f, nothing, nothing, dims, (b, a1, A...))
 
     return b
 end
@@ -101,18 +101,35 @@ function _mapreducedim!(
             map!(initop, arrays[1], arrays[1])
         end
     else
-        _mapreduce_fuse!(f, op, initop, dims, promoteshape(dims, arrays...))
+        _mapreduce_order!(f, op, initop, dims, promoteshape(dims, arrays...))
     end
     return arrays[1]
 end
 
-function _mapreduce_fuse!(
-        @nospecialize(f), @nospecialize(op), @nospecialize(initop),
-        dims::Dims, arrays::Tuple{Vararg{StridedView}}
-    )
-    # Fuse dimensions if possible: assume that at least one array, e.g. the output array in
-    # arrays[1], has its strides sorted
-    allstrides = map(strides, arrays)
+# Cache-friendly reordering of the loop dimensions: put the most important
+# (smallest-stride, most contiguous) dimension first and size-1 dimensions last.
+# The importance of each dimension is modelled from the `indexorder` of every
+# array's strides, with the output array (`strides[1]`) weighted by a factor 2.
+# `strides` is the per-array tuple-of-tuples; returns the reordered `(dims, strides)`.
+function _sortdims(dims, strides)
+    M = length(strides)
+    N = length(dims)
+    # ceil(Int, log2(M+2)) # to account for the fact that there are M arrays, where the first one is counted with a factor 2
+    g = 8 * sizeof(Int) - leading_zeros(M + 1)
+    importance = 2 .* (1 .<< (g .* (N .- indexorder(strides[1]))))
+    for k in 2:M
+        importance = importance .+ (1 .<< (g .* (N .- indexorder(strides[k]))))
+    end
+
+    importance = importance .* (dims .> 1) # put dims 1 at the back
+    p = TupleTools.sortperm(importance; rev = true)
+    return TupleTools.getindices(dims, p), broadcast(TupleTools.getindices, strides, (p,))
+end
+
+# Fuse dimensions if possible: merge dimension `i` into `i-1` when the two are
+# contiguous in *every* array (`s[i] == dims[i-1] * s[i-1]`).
+# Merged dimensions fold their extent into `i-1` and become size 1.
+function _fusedims(dims, allstrides)
     @inbounds for i in length(dims):-1:2
         merge = true
         for s in allstrides
@@ -126,31 +143,29 @@ function _mapreduce_fuse!(
             dims = TupleTools.setindex(dims, 1, i)
         end
     end
-    return _mapreduce_order!(f, op, initop, dims, allstrides, arrays)
+    return dims
 end
 
+function order_and_fuse_dims(dims, allstrides)
+    dims, allstrides = _sortdims(dims, allstrides)
+    dims = _fusedims(dims, allstrides)
+    return _sortdims(dims, allstrides)
+end
+
+# Per-dimension cost used by the blocking and thread-splitting heuristics,
+# derived from the minimum (doubled) stride across arrays.
+_computecosts(strides) = map(a -> ifelse(iszero(a), 1, a << 1), map(min, strides...))
+
+# Pipeline entry point: order → fuse → order → block → kernel.
+# Fusing needs ordered entries, and final order pass brings remaining dim 1 to end
 function _mapreduce_order!(
         @nospecialize(f), @nospecialize(op), @nospecialize(initop),
-        dims, strides, arrays
+        dims::Dims, arrays::Tuple{Vararg{StridedView}}
     )
-    M = length(arrays)
-    N = length(dims)
-    # sort order of loops/dimensions by modelling the importance of each dimension
-    g = 8 * sizeof(Int) - leading_zeros(M + 1) # ceil(Int, log2(M+2)) # to account for the fact
-    # that there are M arrays, where the first one is counted with a factor 2
-    importance = 2 .* (1 .<< (g .* (N .- indexorder(strides[1]))))  # first array is output
-    # and is more important by a factor 2
-    for k in 2:M
-        importance = importance .+ (1 .<< (g .* (N .- indexorder(strides[k]))))
-    end
-
-    importance = importance .* (dims .> 1) # put dims 1 at the back
-    p = TupleTools.sortperm(importance; rev = true)
-    dims = TupleTools.getindices(dims, p)
-    strides = broadcast(TupleTools.getindices, strides, (p,))
+    dims, allstrides = order_and_fuse_dims(dims, map(strides, arrays))
     offsets = map(offset, arrays)
-    costs = map(a -> ifelse(iszero(a), 1, a << 1), map(min, strides...))
-    return _mapreduce_block!(f, op, initop, dims, strides, offsets, costs, arrays)
+    costs = _computecosts(allstrides)
+    return _mapreduce_block!(f, op, initop, dims, allstrides, offsets, costs, arrays)
 end
 
 const MINTHREADLENGTH = 1 << 15 # minimal length before any kind of threading is applied
