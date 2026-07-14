@@ -111,50 +111,47 @@ function blas_mul!(
         C::StridedView{T, 2}, A::StridedView{T, 2}, B::StridedView{T, 2},
         α::Number, β::Number
     ) where {T <: LinearAlgebra.BlasFloat}
+    m, n = size(C)
+    m == size(A, 1) && n == size(B, 2) || throw(DimensionMismatch())
     nthreads = use_threaded_mul() ? get_num_threads() : 1
-    return _threaded_blas_mul!(C, A, B, α, β, nthreads)
+    A2, CA = getblasmatrix(A)
+    B2, CB = getblasmatrix(B)
+    return _threaded_blas_mul!(C, A2, CA, B2, CB, convert(T, α), convert(T, β), nthreads)
 end
 
+_split_row(A, m) = (A[1:m, :], A[(m + 1):end, :])
+_split_col(A, m) = (A[:, 1:m], A[:, (m + 1):end])
+
 function _threaded_blas_mul!(
-        C::StridedView{T, 2}, A::StridedView{T, 2}, B::StridedView{T, 2},
+        C::StridedView{T, 2},
+        A::StridedView{T, 2}, CA,
+        B::StridedView{T, 2}, CB,
         α::Number, β::Number,
         nthreads
     ) where {T <: LinearAlgebra.BlasFloat}
     m, n = size(C)
-    m == size(A, 1) && n == size(B, 2) || throw(DimensionMismatch())
-    return if nthreads == 1 || m * n < 1024
-        A2, CA = getblasmatrix(A)
-        B2, CB = getblasmatrix(B)
-        LinearAlgebra.BLAS.gemm!(CA, CB, convert(T, α), A2, B2, convert(T, β), C)
-    else
-        if m > n
-            m2 = round(Int, m / 16) * 8
-            nthreads2 = nthreads >> 1
-            t = Threads.@spawn _threaded_blas_mul!(
-                C[1:($m2), :], A[1:($m2), :], B, α, β,
-                $nthreads2
-            )
-            _threaded_blas_mul!(
-                C[(m2 + 1):m, :], A[(m2 + 1):m, :], B, α, β,
-                nthreads - nthreads2
-            )
-            wait(t)
-            return C
-        else
-            n2 = round(Int, n / 16) * 8
-            nthreads2 = nthreads >> 1
-            t = Threads.@spawn _threaded_blas_mul!(
-                C[:, 1:($n2)], A, B[:, 1:($n2)], α, β,
-                $nthreads2
-            )
-            _threaded_blas_mul!(
-                C[:, (n2 + 1):n], A, B[:, (n2 + 1):n], α, β,
-                nthreads - nthreads2
-            )
-            wait(t)
-            return C
-        end
+    if nthreads == 1 || m * n < 1024
+        LinearAlgebra.BLAS.gemm!(CA, CB, α, A, B, β, C)
+        return C
     end
+
+    if m > n
+        m2 = round(Int, m / 16) * 8
+        Chead, Ctail = _split_row(C, m2)
+        Ahead, Atail = CA == 'N' ? _split_row(A, m2) : _split_col(A, m2)
+        Bhead = Btail = B
+    else
+        n2 = round(Int, n / 16) * 8
+        Chead, Ctail = _split_col(C, n2)
+        Ahead = Atail = A
+        Bhead, Btail = CB == 'N' ? _split_col(B, n2) : _split_row(B, n2)
+    end
+    nthreads1 = nthreads >> 1
+    nthreads2 = nthreads - nthreads1
+    t = Threads.@spawn _threaded_blas_mul!(Chead, Ahead, CA, Bhead, CB, α, β, nthreads1)
+    _threaded_blas_mul!(Ctail, Atail, CA, Btail, CB, α, β, nthreads2)
+    wait(t)
+    return C
 end
 
 # This implementation is faster than LinearAlgebra.generic_matmatmul
