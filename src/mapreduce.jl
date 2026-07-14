@@ -253,17 +253,6 @@ function _mapreduce_threaded!(
     return nothing
 end
 
-@generated function _mapreduce_kernel!(
-        (f), (op),
-        (initop), dims::NTuple{N, Int},
-        blocks::NTuple{N, Int},
-        arrays::NTuple{M, StridedView},
-        strides::NTuple{M, NTuple{N, Int}},
-        offsets::NTuple{M, Int}
-    ) where {N, M}
-    return _mapreduce_kernel_expr(f, op, initop, N, M)
-end
-
 function _mapreduce_kernel_expr(f, op, initop, N::Int, M::Int)
 
     # many variables
@@ -501,6 +490,17 @@ function _mapreduce_kernel_expr(f, op, initop, N::Int, M::Int)
         end
     end
     return ex
+end
+
+@generated function _mapreduce_kernel!(
+        (f), (op),
+        (initop), dims::NTuple{N, Int},
+        blocks::NTuple{N, Int},
+        arrays::NTuple{M, StridedView},
+        strides::NTuple{M, NTuple{N, Int}},
+        offsets::NTuple{M, Int}
+    ) where {N, M}
+    return _mapreduce_kernel_expr(f, op, initop, N, M)
 end
 
 function indexorder(strides::NTuple{N, Int}) where {N}
