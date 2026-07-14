@@ -57,4 +57,6 @@ include("broadcast.jl")
 include("macros.jl")
 include("convert.jl")
 
+include("precompile.jl")
+
 end

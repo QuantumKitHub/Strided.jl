@@ -5,6 +5,7 @@ authors = ["Lukas Devos <lukas.devos@ugent.be>", "Maarten Van Damme <maartenvd19
 
 [deps]
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+PrecompileTools = "aea7be01-6a6a-4083-8856-8a6e6704d82a"
 StridedViews = "4db3bf67-4bd7-4b4e-b153-31dc3fb37143"
 TupleTools = "9d95972d-f1c8-5527-a6e0-b4b365fa01f6"
 
@@ -29,6 +30,7 @@ GPUArrays = "11.4.1"
 JLArrays = "0.3.1"
 LinearAlgebra = "1.6"
 Metal = "1.9"
+PrecompileTools = "1"
 Random = "1.6"
 StridedViews = "0.5.1"
 Test = "1.6"
