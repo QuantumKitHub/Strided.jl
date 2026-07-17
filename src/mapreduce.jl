@@ -68,6 +68,7 @@ function _mapreduce(@nospecialize(f), @nospecialize(op), A::StridedView{T}, nt =
     dims = size(A)
     a = Base.mapreduce_first(f, op, first(A))
     a2 = nt === nothing ? a : op(a, nt.init)
+    ndims(A) == 0 && return a2 # 0-dim scalar: single-element reduction is the result
     out = similar(A, typeof(a2), (1,))
     if nt === nothing
         _init_reduction!(out, f, op, a)
@@ -162,10 +163,25 @@ function _mapreduce_order!(
         @nospecialize(f), @nospecialize(op), @nospecialize(initop),
         dims::Dims, arrays::Tuple{Vararg{StridedView}}
     )
+    isempty(dims) && return _mapreduce_scalar!(f, op, initop, arrays)
     dims, allstrides = order_and_fuse_dims(dims, map(strides, arrays))
     offsets = map(offset, arrays)
     costs = _computecosts(allstrides)
     return _mapreduce_block!(f, op, initop, dims, allstrides, offsets, costs, arrays)
+end
+
+# 0-dimensional fast path: bypass @generated kernel
+function _mapreduce_scalar!(@nospecialize(f), @nospecialize(op), @nospecialize(initop), arrays)
+    out = arrays[1]
+    iout = ParentIndex(offset(out) + 1)
+    v = f(map(a -> a[ParentIndex(offset(a) + 1)], Base.tail(arrays))...)
+    if op === nothing
+        out[iout] = v
+    else
+        o = initop === nothing ? out[iout] : initop(out[iout])
+        out[iout] = op(o, v)
+    end
+    return nothing
 end
 
 const MINTHREADLENGTH = 1 << 15 # minimal length before any kind of threading is applied
@@ -269,6 +285,7 @@ function _mapreduce_threaded!(
 end
 
 function _mapreduce_kernel_expr(f, op, initop, N::Int, M::Int)
+    @assert N > 0 "Cannot generate 0-dim kernel"
 
     # many variables
     blockloopvars = Array{Symbol}(undef, N)
