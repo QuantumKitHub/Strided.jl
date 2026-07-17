@@ -155,6 +155,50 @@ end
     end
 end
 
+@testset "0-dimensional (scalar) StridedView" begin
+    @testset for T in (Float32, Float64, ComplexF32, ComplexF64)
+        R = fill(rand(T)) # 0-dimensional Array
+        A = StridedView(R)
+        @test ndims(A) == 0
+
+        # full reductions
+        @test sum(A) == sum(R)
+        @test prod(A) == prod(R)
+        @test mapreduce(abs2, +, A) == mapreduce(abs2, +, R)
+        @test maximum(abs, A) == maximum(abs, R)
+        @test minimum(abs, A) == minimum(abs, R)
+        @test sum(abs2, A) == sum(abs2, R)
+        @test mapreduce(identity, +, A; init = one(T)) ==
+            mapreduce(identity, +, R; init = one(T))
+
+        # map / map! / copy! / fill!
+        @test map(x -> 2x, A)[] == 2 * R[]
+        B = StridedView(fill(zero(T)))
+        map!(x -> x + one(T), B, A)
+        @test B[] == R[] + one(T)
+        copy!(B, A)
+        @test B[] == R[]
+        fill!(B, one(T))
+        @test B[] == one(T)
+
+        # offset handling: 0-dim views into a larger parent
+        Psrc = rand(T, 5)
+        Pdst = rand(T, 5)
+        s = sreshape(StridedView(Psrc)[4:4], ())
+        d = sreshape(StridedView(Pdst)[3:3], ())
+        @test sum(s) == Psrc[4]
+        copy!(d, s)
+        @test Pdst[3] == Psrc[4]
+
+        # low-level in-place reduction with a custom initop
+        Pd = rand(T, 5)
+        d2 = sreshape(StridedView(Pd)[2:2], ())
+        prev = Pd[2]
+        Strided._mapreducedim!(sin, +, identity, (), (d2, A))
+        @test Pd[2] == prev + sin(R[])
+    end
+end
+
 @testset "@strided macro" begin
     @testset for T in (Float32, Float64, ComplexF32, ComplexF64)
         A1, A2, A3 = rand(T, (10,)), rand(T, (10, 10)), rand(T, (10, 10, 10))
