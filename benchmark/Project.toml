@@ -1,0 +1,10 @@
+[deps]
+ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+Strided = "5e0ebb24-38b0-5f93-81fe-25c709ecae67"
+TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
+
+[compat]
+ArgParse = "1"
+BenchmarkTools = "1"
+TOML = "1"
