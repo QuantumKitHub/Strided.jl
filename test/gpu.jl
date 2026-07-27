@@ -184,3 +184,64 @@ end
         @test compare(x -> prod(exp, x), AT, A3)
     end
 end
+
+@testset "0-dimensional (scalar) StridedView ($AT)" for AT in ATs
+    @testset for T in (Float32, ComplexF32)
+        R = fill(rand(T)) # 0-dimensional Array
+        A = StridedView(AT(R))
+        @test ndims(A) == 0
+
+        # full reductions
+        @test sum(A) == sum(R)
+        @test prod(A) == prod(R)
+        @test mapreduce(abs2, +, A) == mapreduce(abs2, +, R)
+        @test maximum(abs, A) == maximum(abs, R)
+        @test minimum(abs, A) == minimum(abs, R)
+        @test sum(abs2, A) == sum(abs2, R)
+        @test mapreduce(identity, +, A; init = one(T)) ==
+            mapreduce(identity, +, R; init = one(T))
+
+        # map / map! / copy! / fill!
+        mapx = map(x -> 2x, A)
+        GPUArrays.@allowscalar begin
+            @test mapx[] == 2 * R[]
+        end
+        B = StridedView(AT(fill(zero(T))))
+        map!(x -> x + one(T), B, A)
+        GPUArrays.@allowscalar begin
+            @test B[] == collect(R)[] + one(T)
+        end
+        copy!(B, A)
+        GPUArrays.@allowscalar begin
+            @test B[] == R[]
+        end
+        fill!(B, one(T))
+        GPUArrays.@allowscalar begin
+            @test B[] == one(T)
+        end
+
+        # offset handling: 0-dim views into a larger parent
+        Psrc = AT(rand(T, 5))
+        Pdst = AT(rand(T, 5))
+        s = sreshape(StridedView(Psrc)[4:4], ())
+        d = sreshape(StridedView(Pdst)[3:3], ())
+        GPUArrays.@allowscalar begin
+            @test sum(s) == Psrc[4]
+        end
+        copy!(d, s)
+        GPUArrays.@allowscalar begin
+            @test Pdst[3] == Psrc[4]
+        end
+
+        # low-level in-place reduction with a custom initop
+        Pd = AT(rand(T, 5))
+        d2 = sreshape(StridedView(Pd)[2:2], ())
+        GPUArrays.@allowscalar begin
+            prev = Pd[2]
+        end
+        Strided._mapreducedim!(sin, +, identity, (), (d2, A))
+        GPUArrays.@allowscalar begin
+            @test Pd[2] == prev + sin(R[])
+        end
+    end
+end
