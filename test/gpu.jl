@@ -202,29 +202,46 @@ end
             mapreduce(identity, +, R; init = one(T))
 
         # map / map! / copy! / fill!
-        @test map(x -> 2x, A)[] == 2 * R[]
+        mapx = map(x -> 2x, A)
+        GPUArrays.@allowscalar begin
+            @test mapx[] == 2 * R[]
+        end
         B = StridedView(AT(fill(zero(T))))
         map!(x -> x + one(T), B, A)
-        @test B[] == R[] + one(T)
+        GPUArrays.@allowscalar begin
+            @test B[] == collect(R)[] + one(T)
+        end
         copy!(B, A)
-        @test B[] == R[]
+        GPUArrays.@allowscalar begin
+            @test B[] == R[]
+        end
         fill!(B, one(T))
-        @test B[] == one(T)
+        GPUArrays.@allowscalar begin
+            @test B[] == one(T)
+        end
 
         # offset handling: 0-dim views into a larger parent
-        Psrc = rand(T, 5)
-        Pdst = rand(T, 5)
-        s = sreshape(StridedView(AT(Psrc))[4:4], ())
-        d = sreshape(StridedView(AT(Pdst))[3:3], ())
-        @test sum(s) == Psrc[4]
+        Psrc = AT(rand(T, 5))
+        Pdst = AT(rand(T, 5))
+        s = sreshape(StridedView(Psrc)[4:4], ())
+        d = sreshape(StridedView(Pdst)[3:3], ())
+        GPUArrays.@allowscalar begin
+            @test sum(s) == Psrc[4]
+        end
         copy!(d, s)
-        @test Pdst[3] == Psrc[4]
+        GPUArrays.@allowscalar begin
+            @test Pdst[3] == Psrc[4]
+        end
 
         # low-level in-place reduction with a custom initop
-        Pd = rand(T, 5)
-        d2 = sreshape(StridedView(AT(Pd))[2:2], ())
-        prev = Pd[2]
+        Pd = AT(rand(T, 5))
+        d2 = sreshape(StridedView(Pd)[2:2], ())
+        GPUArrays.@allowscalar begin
+            prev = Pd[2]
+        end
         Strided._mapreducedim!(sin, +, identity, (), (d2, A))
-        @test Pd[2] == prev + sin(R[])
+        GPUArrays.@allowscalar begin
+            @test Pd[2] == prev + sin(R[])
+        end
     end
 end
