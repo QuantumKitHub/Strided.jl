@@ -185,7 +185,7 @@ end
     end
 end
 
-@testset "0-dimensional (scalar) StridedView ($AT)" for AT in ATs 
+@testset "0-dimensional (scalar) StridedView ($AT)" for AT in ATs
     @testset for T in (Float32, Float64, ComplexF32, ComplexF64)
         R = fill(rand(T)) # 0-dimensional Array
         A = StridedView(AT(R))
