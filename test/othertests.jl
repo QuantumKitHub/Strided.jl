@@ -172,7 +172,7 @@ end
         S = StridedView(Vector{T}(undef, 1), (), (), 0)
         @test fill!(S, T(7))[] == T(7)
 
-        R = rand(T, 6)
+        R = T[1, 4, 2, 3, 5, 6]
         V, M = StridedView(copy(R), (2, 3), (1, 2), 0), reshape(copy(R), 2, 3)
         @test norm(V) == norm(M)
         @test sum(V) == sum(M)
