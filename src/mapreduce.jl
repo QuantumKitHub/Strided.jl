@@ -6,6 +6,13 @@ LinearAlgebra.adjoint!(dst::StridedView, src::StridedView) = copy!(dst, adjoint(
 LinearAlgebra.transpose!(C::StridedView, A::StridedView) = copy!(C, transpose(A))
 Base.permutedims!(dst::StridedView, src::StridedView, p) = copy!(dst, permutedims(src, p))
 Base.fill!(A::StridedView, val) = map!(Returns(val), A, A)
+function Base.fill!(
+        A::StridedView{<:Union{BigFloat, Complex{BigFloat}, BigInt, Complex{BigInt}}}, val
+    )
+    isempty(A) && return A
+    _mapreduce_order!(Returns(val), nothing, nothing, size(A), (A,))
+    return A
+end
 
 # This is a wrapper function intended to allow us to
 # intercept "conj" and rewrite it in cases where the
