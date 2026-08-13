@@ -155,6 +155,37 @@ end
     end
 end
 
+@testset "fill! and reductions with undef-initialized BigFloat/BigInt storage" begin
+    @testset for T in (BigFloat, Complex{BigFloat}, BigInt, Complex{BigInt})
+        # test the specific path in src/mapreduce here that avoids undefined
+        # reference errors
+        @test collect(fill!(StridedView(Vector{T}(undef, 5)), one(T))) == ones(T, 5)
+
+        A = StridedView(Vector{T}(undef, 12), (2, 3), (1, 4), 0)
+        @test collect(fill!(A, T(3))) == fill(T(3), 2, 3)
+
+        B = StridedView(Vector{T}(undef, 6), (2, 3), (-1, 2), 1)
+        @test collect(fill!(B, T(5))) == fill(T(5), 2, 3)
+
+        @test fill!(StridedView(Vector{T}(undef, 0), (0,), (1,), 0), one(T)) |> isempty
+
+        S = StridedView(Vector{T}(undef, 1), (), (), 0)
+        @test fill!(S, T(7))[] == T(7)
+
+        R = T[1, 4, 2, 3, 5, 6]
+        V, M = StridedView(copy(R), (2, 3), (1, 2), 0), reshape(copy(R), 2, 3)
+        @test norm(V) == norm(M)
+        @test sum(V) == sum(M)
+        @test prod(V) == prod(M)
+        @test maximum(abs, V) == maximum(abs, M)
+        @test minimum(abs, V) == minimum(abs, M)
+
+        # large enough to reach the threaded reduction path
+        L = StridedView(Vector{T}(undef, 1 << 17))
+        @test sum(fill!(L, T(2))) == T(2) * (1 << 17)
+    end
+end
+
 @testset "0-dimensional (scalar) StridedView" begin
     @testset for T in (Float32, Float64, ComplexF32, ComplexF64)
         R = fill(rand(T)) # 0-dimensional Array
