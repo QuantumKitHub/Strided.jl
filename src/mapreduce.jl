@@ -5,14 +5,7 @@ Base.conj!(a::StridedView) = map!(conj, a, a)
 LinearAlgebra.adjoint!(dst::StridedView, src::StridedView) = copy!(dst, adjoint(src))
 LinearAlgebra.transpose!(C::StridedView, A::StridedView) = copy!(C, transpose(A))
 Base.permutedims!(dst::StridedView, src::StridedView, p) = copy!(dst, permutedims(src, p))
-Base.fill!(A::StridedView, val) = map!(Returns(val), A, A)
-function Base.fill!(
-        A::StridedView{<:Union{BigFloat, Complex{BigFloat}, BigInt, Complex{BigInt}}}, val
-    )
-    isempty(A) && return A
-    _mapreduce_order!(Returns(val), nothing, nothing, size(A), (A,))
-    return A
-end
+Base.fill!(A::StridedView, val) = map!(Returns(val), A)
 
 # This is a wrapper function intended to allow us to
 # intercept "conj" and rewrite it in cases where the
@@ -47,21 +40,22 @@ function Base.map(
     return map!(f, similar(a1, T), a1, A...)
 end
 
+# The source arrays may be empty: `map!(f, b)` writes `f()` into every entry of `b` without
+# ever reading it, unlike `Base.map!(f, inout)` (Julia >= 1.12), which means `map!(f, inout, inout)`.
 function Base.map!(
-        @nospecialize(f), b::StridedView{<:Any, N}, a1::StridedView{<:Any, N},
+        @nospecialize(f), b::StridedView{<:Any, N},
         A::Vararg{StridedView{<:Any, N}}
     ) where {N}
     dims = size(b)
 
     # Check dimesions
-    size(a1) == dims || throw(DimensionMismatch())
     for a in A
         size(a) == dims || throw(DimensionMismatch())
     end
 
     any(isequal(0), dims) && return b # don't do anything
 
-    _mapreduce_order!(f, nothing, nothing, dims, (b, a1, A...))
+    _mapreduce_order!(f, nothing, nothing, dims, (b, A...))
 
     return b
 end

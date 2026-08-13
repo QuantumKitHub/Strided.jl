@@ -96,6 +96,8 @@ end
             @test compare((x, y, z) -> map((a, b, c) -> sin(a) + b / exp(-abs(c)), x, y, z), AT, A1, A2, A3)
             @test compare((x, y) -> mul!(x, 1, y), AT, A1, A2)
             @test compare((x, y) -> mul!(x, y, 1), AT, A1, A2)
+            # `fill!` writes without reading, i.e. hits the single-array kernel
+            @test compare(x -> fill!(x, one(T)), AT, A1)
         end
 
         dims = ntuple(Returns(20), 2)
@@ -107,6 +109,7 @@ end
         @test compare((x, y) -> axpy!(1 // 3, x, y), AT, A1, A2)
         @test compare((x, y) -> axpby!(1 // 3, x, 1 // 2, y), AT, A1, A2)
         @test compare((x, y, z) -> map((a, b, c) -> sin(a) + b / exp(-abs(c)), x, y, z), AT, A1, A2, A3)
+        @test compare(x -> fill!(x, one(T)), AT, A1)
         @test compare((x, y) -> mul!(x, 1, y), AT, A1, A2)
         @test compare((x, y) -> mul!(x, y, 1), AT, A1, A2)
     end
