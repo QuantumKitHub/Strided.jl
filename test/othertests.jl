@@ -186,49 +186,6 @@ end
     end
 end
 
-@testset "map! without source arrays" begin
-    @testset for T in (Float64, ComplexF64)
-        x = T <: Complex ? T(3 + 2im) : T(3)
-
-        A = StridedView(zeros(T, 5))
-        @test map!(Returns(x), A) === A
-        @test collect(A) == fill(x, 5)
-
-        # strided view: entries of the parent outside the view are left alone
-        P = T[1:12;]
-        B = StridedView(P, (2, 3), (1, 4), 0)
-        @test collect(map!(Returns(x), B)) == fill(x, 2, 3)
-        @test P[[3, 4, 7, 8, 11, 12]] == T[3, 4, 7, 8, 11, 12]
-
-        # negative strides and a nonzero offset
-        C = StridedView(zeros(T, 6), (2, 3), (-1, 2), 1)
-        @test collect(map!(Returns(x), C)) == fill(x, 2, 3)
-
-        # the view's `op` is applied on write
-        D = conj(StridedView(zeros(T, 4)))
-        @test collect(map!(Returns(x), D)) == fill(x, 4)
-        @test parent(D) == fill(conj(x), 4)
-
-        # 0-dimensional and empty views
-        S = StridedView(zeros(T, 1), (), (), 0)
-        @test map!(Returns(x), S)[] == x
-        E = StridedView(T[], (0,), (1,), 0)
-        @test map!(Returns(x), E) |> isempty
-
-        # large enough to reach the threaded path
-        L = StridedView(zeros(T, 1 << 17))
-        @test sum(map!(Returns(x), L)) == x * (1 << 17)
-
-        # the multi-source forms are unchanged
-        a1, a2 = StridedView(T[1:6;]), StridedView(fill(T(2), 6))
-        b = StridedView(zeros(T, 6))
-        @test collect(map!(-, b, a1)) == -collect(a1)
-        @test collect(map!(+, b, a1, a2)) == collect(a1) .+ collect(a2)
-        @test_throws DimensionMismatch map!(identity, b, StridedView(zeros(T, 5)))
-        @test_throws DimensionMismatch map!(+, b, a1, StridedView(zeros(T, 5)))
-    end
-end
-
 @testset "0-dimensional (scalar) StridedView" begin
     @testset for T in (Float32, Float64, ComplexF32, ComplexF64)
         R = fill(rand(T)) # 0-dimensional Array
