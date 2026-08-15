@@ -27,6 +27,14 @@ end
             A3 = convert(Array{T, N}, B3)
             C1 = deepcopy(B1)
 
+            # Regression tests for https://github.com/QuantumKitHub/Strided.jl/issues/82:
+            # `map` must infer its output eltype correctly when the input is a StridedView
+            @test map(x -> ComplexF64(x), B1) == map(x -> ComplexF64(x), A1)
+            @test map(x -> ComplexF64(x), B1) isa StridedView
+            @test eltype(map(x -> ComplexF64(x), B1)) == ComplexF64
+            @test eltype(map((x, y) -> ComplexF64(x) + im * ComplexF64(y), B1, B2)) ==
+                ComplexF64
+
             @test rmul!(B1, 1 // 2) ≈ rmul!(A1, 1 // 2)
             @test lmul!(1 // 3, B2) ≈ lmul!(1 // 3, A2)
             @test axpy!(1 // 3, B1, B2) ≈ axpy!(1 // 3, A1, A2)
@@ -37,6 +45,7 @@ end
                 map((x, y, z) -> sin(x) + y / exp(-abs(z)), A1, A2, A3)
             @test map((x, y, z) -> sin(x) + y / exp(-abs(z)), B1, B2, B3) isa StridedView
             @test map((x, y, z) -> sin(x) + y / exp(-abs(z)), B1, A2, B3) isa Array
+
             @test mul!(B1, 1, B2) ≈ mul!(A1, 1, A2)
             @test mul!(B1, B2, 1) ≈ mul!(A1, A2, 1)
         end
