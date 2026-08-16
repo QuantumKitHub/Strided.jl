@@ -43,7 +43,7 @@ function Base.map(
         @nospecialize(f), a1::StridedView{<:Any, N},
         A::Vararg{StridedView{<:Any, N}}
     ) where {N}
-    T = Base.promote_eltype(a1, A...)
+    T = Base.promote_op(f, eltype(a1), eltype.(A)...)
     return map!(f, similar(a1, T), a1, A...)
 end
 
