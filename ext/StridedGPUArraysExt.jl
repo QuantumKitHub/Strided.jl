@@ -163,4 +163,8 @@ function Strided.isblasmatrix(A::GPUStridedView{T, 2}) where {T <: LinearAlgebra
     end
 end
 
+# ---------- GPU batched out-of-place permutation support ----------
+
+include("StridedGPUArraysExt_batched.jl")
+
 end
