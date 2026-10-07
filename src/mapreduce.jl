@@ -200,11 +200,14 @@ function _mapreduce_block!(
         f::F, op::OP, initop::I, dims, strides, offsets, costs, arrays
     ) where {F, OP, I}
     bytestrides = map((s, stride) -> s .* stride, sizeof.(eltype.(arrays)), strides)
-    strideorders = map(indexorder, strides)
-    blocks = _computeblocks(dims, costs, bytestrides, strideorders)
-
-    # t = @elapsed _computeblocks(dims, costs, bytestrides, strideorders)
-    # println("_computeblocks time: $t")
+    memoryregion = totalmemoryregion(dims, bytestrides)
+    # When the estimated footprint fits, the full dimensions are already optimal.
+    blocks = if memoryregion <= BLOCKMEMORYSIZE
+        dims
+    else
+        strideorders = map(indexorder, strides)
+        _computeblocks(dims, costs, bytestrides, strideorders, BLOCKMEMORYSIZE, memoryregion)
+    end
 
     if get_num_threads() == 1 || prod(dims) <= MINTHREADLENGTH
         _mapreduce_kernel!(f, op, initop, dims, blocks, arrays, strides, offsets)
@@ -595,9 +598,10 @@ function _computeblocks(
         dims::NTuple{N, Int}, costs::NTuple{N, Int},
         bytestrides::Tuple{Vararg{NTuple{N, Int}}},
         strideorders::Tuple{Vararg{NTuple{N, Int}}},
-        blocksize::Int = BLOCKMEMORYSIZE
+        blocksize::Int = BLOCKMEMORYSIZE,
+        memoryregion::Int = totalmemoryregion(dims, bytestrides)
     ) where {N}
-    if totalmemoryregion(dims, bytestrides) <= blocksize
+    if memoryregion <= blocksize
         return dims
     end
     minstrideorder = minimum(minimum.(strideorders))
