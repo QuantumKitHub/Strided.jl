@@ -138,40 +138,65 @@ function _fusedims(dims, allstrides)
     return dims
 end
 
-# Compute stride orders once for dimension ordering: fusing only changes sizes,
-# so surviving dimensions retain their importance order and singleton dimensions
-# move last.
+# Fusing only changes sizes, so surviving dimensions retain their importance
+# order. The second permutation only moves singleton dimensions to the back.
 function order_and_fuse_dims(dims::Dims, allstrides::Tuple)
-    orders = map(indexorder, allstrides)
-    p1 = _sortperm_desc(_importance(dims, orders))
-    strides1 = map(s -> TupleTools.getindices(s, p1), allstrides)
-    dims1 = _fusedims(TupleTools.getindices(dims, p1), strides1)
-    p2 = _sortperm_desc(map(d -> Int(d > 1), dims1))
-    return TupleTools.getindices(dims1, p2),
-        map(s -> TupleTools.getindices(s, p2), strides1)
+    stride_orders = map(indexorder, allstrides)
+    loop_order = _sortperm_desc(_importance(dims, stride_orders))
+    ordered_dims = TupleTools.getindices(dims, loop_order)
+    ordered_strides = map(s -> TupleTools.getindices(s, loop_order), allstrides)
+
+    fused_dims = _fusedims(ordered_dims, ordered_strides)
+    active_order = _sortperm_desc(map(d -> Int(d > 1), fused_dims))
+    return TupleTools.getindices(fused_dims, active_order),
+        map(s -> TupleTools.getindices(s, active_order), ordered_strides)
 end
 
-# Weight the output array twice when choosing a cache-friendly loop order.
-function _importance(dims::NTuple{N, Int}, orders::NTuple{M, NTuple{N, Int}}) where {N, M}
-    g = 8 * sizeof(Int) - leading_zeros(M + 1)
-    importance = 2 .* (1 .<< (g .* (N .- orders[1])))
+# Each stride rank gets enough bits to hold all array votes without carries.
+# The output array gets two votes; each input gets one.
+function _importance(dims::NTuple{N, Int}, stride_orders::NTuple{M, NTuple{N, Int}}) where {N, M}
+    bits_per_rank = 8 * sizeof(Int) - leading_zeros(M + 1)
+    importance = 2 .* (1 .<< (bits_per_rank .* (N .- stride_orders[1])))
     for k in 2:M
-        importance = importance .+ (1 .<< (g .* (N .- orders[k])))
+        importance = importance .+ (1 .<< (bits_per_rank .* (N .- stride_orders[k])))
     end
     return importance .* (dims .> 1)
 end
 
-# Stable descending insertion sort for short tuples.
-function _sortperm_desc(v::NTuple{N, Int}) where {N}
-    p = ntuple(identity, Val(N))
-    @inbounds for i in 2:N
-        j = i
-        while j > 1 && v[p[j - 1]] < v[p[j]]
-            p = TupleTools.setindex(TupleTools.setindex(p, p[j], j - 1), p[j - 1], j)
-            j -= 1
+# Tiny tuples need at most one swap; longer tuples use comparison counting.
+_sortperm_desc(values::NTuple{N, Int}) where {N} =
+    N <= 2 ? _sortperm_desc_insertion(values) : _sortperm_desc_ranked(values)
+
+function _sortperm_desc_insertion(values::NTuple{N, Int}) where {N}
+    permutation = ntuple(identity, Val(N))
+    @inbounds for source in 2:N
+        position = source
+        while position > 1 && values[permutation[position - 1]] < values[permutation[position]]
+            permutation = TupleTools.setindex(
+                TupleTools.setindex(permutation, permutation[position], position - 1),
+                permutation[position - 1], position
+            )
+            position -= 1
         end
     end
-    return p
+    return permutation
+end
+
+# Stable descending permutation: count larger values and earlier equal values.
+function _sortperm_desc_ranked(values::NTuple{N, Int}) where {N}
+    permutation = ntuple(identity, Val(N))
+    issorted(values; rev = true) && return permutation
+
+    @inbounds for source in 1:N
+        value = values[source]
+        position = 1
+        @simd for other in 1:N
+            other_value = values[other]
+            position += (other_value > value) | ((other_value == value) & (other < source))
+        end
+        permutation = TupleTools.setindex(permutation, source, position)
+    end
+    return permutation
 end
 
 # Per-dimension cost used by the blocking and thread-splitting heuristics,
@@ -556,8 +581,7 @@ end
 end
 
 function indexorder(strides::NTuple{N, Int}) where {N}
-    # returns order such that strides[i] is the order[i]th smallest element of strides, not
-    # counting zero strides zero strides have order 1
+    # Rank absolute nonzero strides. Ties share a rank; zero strides get rank 1.
     return ntuple(Val(N)) do i
         si = abs(strides[i])
         iszero(si) && return 1
