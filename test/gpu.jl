@@ -93,7 +93,7 @@ end
             @test compare(x -> lmul!(1 // 3, x), AT, A2)
             @test compare((x, y) -> axpy!(1 // 3, x, y), AT, A1, A2)
             @test compare((x, y) -> axpby!(1 // 3, x, 1 // 2, y), AT, A1, A2)
-            @test compare((x, y, z) -> map((a, b, c) -> sin(a) + b / exp(-abs(c)), x, y, z), AT, A1, A2, A3)
+            @test compare((x, y, z) -> map((a, b, c) -> cos(a) + b / exp(-abs(c)), x, y, z), AT, A1, A2, A3)
             @test compare((x, y) -> mul!(x, 1, y), AT, A1, A2)
             @test compare((x, y) -> mul!(x, y, 1), AT, A1, A2)
         end
@@ -106,7 +106,7 @@ end
         @test compare(x -> lmul!(1 // 3, x), AT, A2)
         @test compare((x, y) -> axpy!(1 // 3, x, y), AT, A1, A2)
         @test compare((x, y) -> axpby!(1 // 3, x, 1 // 2, y), AT, A1, A2)
-        @test compare((x, y, z) -> map((a, b, c) -> sin(a) + b / exp(-abs(c)), x, y, z), AT, A1, A2, A3)
+        @test compare((x, y, z) -> map((a, b, c) -> cos(a) + b / exp(-abs(c)), x, y, z), AT, A1, A2, A3)
         @test compare((x, y) -> mul!(x, 1, y), AT, A1, A2)
         @test compare((x, y) -> mul!(x, y, 1), AT, A1, A2)
     end
@@ -136,7 +136,7 @@ end
         A3 = permutedims(StridedView(rand(T, (10, 10, 10))), randperm(3))
         A4 = StridedView(rand(T, (2, 0)))
 
-        @test compare((x, y) -> x .+ sin.(y .- 3), AT, A1, A2)
+        @test compare((x, y) -> x .+ cos.(y .- 3), AT, A1, A2)
         @test compare((y, z) -> y' .* z .- Ref(1 // 2), AT, A2, A3)
         @test compare((x, y, z) -> y' .* z .- max.(abs.(x), real.(z)), AT, A1, A2, A3)
         @test compare((u, y, z) -> y' .* z .- u, AT, A0, A2, A3)
@@ -152,19 +152,19 @@ end
         A1 = StridedView(rand(T, ntuple(Returns(sz), N)))
 
         @test compare(x -> sum(x; dims = (1, 3, 5)), AT, A1)
-        @test compare(x -> mapreduce(sin, +, x; dims = (1, 3, 5)), AT, A1)
+        @test compare(x -> mapreduce(cos, +, x; dims = (1, 3, 5)), AT, A1)
         @test compare(x -> sum(x; dims = (1, 3, 5)), AT, permutedims(A1, randperm(N)))
-        @test compare(x -> mapreduce(sin, +, x; dims = (1, 3, 5)), AT, permutedims(A1, randperm(N)))
+        @test compare(x -> mapreduce(cos, +, x; dims = (1, 3, 5)), AT, permutedims(A1, randperm(N)))
 
         A2 = sreshape(StridedView(rand(T, ntuple(Returns(sz), 3))), (sz, 1, 1, sz, sz, 1))
 
-        @test compare((x, y) -> Strided._mapreducedim!(sin, +, identity, ntuple(Returns(sz), N), (x, y)), AT, A1, A2)
-        @test compare((x, y) -> Strided._mapreducedim!(sin, +, Returns(0), ntuple(Returns(sz), N), (x, y)), AT, A1, A2)
-        @test compare((x, y) -> Strided._mapreducedim!(sin, +, conj, ntuple(Returns(sz), N), (x, y)), AT, A1, A2)
+        @test compare((x, y) -> Strided._mapreducedim!(cos, +, identity, ntuple(Returns(sz), N), (x, y)), AT, A1, A2)
+        @test compare((x, y) -> Strided._mapreducedim!(cos, +, Returns(0), ntuple(Returns(sz), N), (x, y)), AT, A1, A2)
+        @test compare((x, y) -> Strided._mapreducedim!(cos, +, conj, ntuple(Returns(sz), N), (x, y)), AT, A1, A2)
 
         β = rand(T)
-        @test compare((x, y) -> Strided._mapreducedim!(sin, +, a -> β, ntuple(Returns(sz), N), (x, y)), AT, A1, A2)
-        @test compare((x, y) -> Strided._mapreducedim!(sin, +, a -> β * a, ntuple(Returns(sz), N), (x, y)), AT, A1, A2)
+        @test compare((x, y) -> Strided._mapreducedim!(cos, +, a -> β, ntuple(Returns(sz), N), (x, y)), AT, A1, A2)
+        @test compare((x, y) -> Strided._mapreducedim!(cos, +, a -> β * a, ntuple(Returns(sz), N), (x, y)), AT, A1, A2)
     end
 end
 
@@ -239,9 +239,9 @@ end
         GPUArrays.@allowscalar begin
             prev = Pd[2]
         end
-        Strided._mapreducedim!(sin, +, identity, (), (d2, A))
+        Strided._mapreducedim!(cos, +, identity, (), (d2, A))
         GPUArrays.@allowscalar begin
-            @test Pd[2] == prev + sin(R[])
+            @test Pd[2] == prev + cos(R[])
         end
     end
 end
