@@ -125,6 +125,17 @@ function Strided._mapreduce_scalar!(
     return nothing
 end
 
+# Singleton views with axes still execute on the device, without layout planning.
+function Strided._mapreduce_scalar!(
+        f, op, initop,
+        arrays::Tuple{GPUStridedView{TO, N}, Vararg{GPUStridedView{<:Any, N}}}
+    ) where {TO, N}
+    return Strided._mapreduce_block!(
+        f, op, initop, size(arrays[1]), map(strides, arrays),
+        map(Strided.offset, arrays), nothing, arrays
+    )
+end
+
 function Strided._mapreduce_block!(
         f, op, initop,
         dims::Dims{N},

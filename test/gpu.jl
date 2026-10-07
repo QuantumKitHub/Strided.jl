@@ -185,11 +185,11 @@ end
     end
 end
 
-@testset "0-dimensional (scalar) StridedView ($AT)" for AT in ATs
-    @testset for T in (Float32, ComplexF32)
-        R = fill(rand(T)) # 0-dimensional Array
+@testset "single-element StridedView ($AT)" for AT in ATs
+    @testset for T in (Float32, ComplexF32), dims in ((), (1,), (1, 1), (1, 1, 1))
+        R = fill(rand(T), dims)
         A = StridedView(AT(R))
-        @test ndims(A) == 0
+        @test size(A) == dims
 
         # full reductions
         @test sum(A) == sum(R)
@@ -206,7 +206,7 @@ end
         GPUArrays.@allowscalar begin
             @test mapx[] == 2 * R[]
         end
-        B = StridedView(AT(fill(zero(T))))
+        B = StridedView(AT(fill(zero(T), dims)))
         map!(x -> x + one(T), B, A)
         GPUArrays.@allowscalar begin
             @test B[] == collect(R)[] + one(T)
@@ -220,11 +220,11 @@ end
             @test B[] == one(T)
         end
 
-        # offset handling: 0-dim views into a larger parent
+        # offset handling: singleton views into a larger parent
         Psrc = AT(rand(T, 5))
         Pdst = AT(rand(T, 5))
-        s = sreshape(StridedView(Psrc)[4:4], ())
-        d = sreshape(StridedView(Pdst)[3:3], ())
+        s = sreshape(StridedView(Psrc)[4:4], dims)
+        d = sreshape(StridedView(Pdst)[3:3], dims)
         GPUArrays.@allowscalar begin
             @test sum(s) == Psrc[4]
         end
@@ -235,11 +235,11 @@ end
 
         # low-level in-place reduction with a custom initop
         Pd = AT(rand(T, 5))
-        d2 = sreshape(StridedView(Pd)[2:2], ())
+        d2 = sreshape(StridedView(Pd)[2:2], dims)
         GPUArrays.@allowscalar begin
             prev = Pd[2]
         end
-        Strided._mapreducedim!(cos, +, identity, (), (d2, A))
+        Strided._mapreducedim!(cos, +, identity, dims, (d2, A))
         GPUArrays.@allowscalar begin
             @test Pd[2] == prev + cos(R[])
         end

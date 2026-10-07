@@ -173,14 +173,15 @@ _computecosts(strides) = map(a -> ifelse(iszero(a), 1, a << 1), map(min, strides
 function _mapreduce_order!(
         f::F, op::OP, initop::I, dims::Dims, arrays::Tuple{Vararg{StridedView}}
     ) where {F, OP, I}
-    isempty(dims) && return _mapreduce_scalar!(f, op, initop, arrays)
+    # A single element needs no layout planning, regardless of the number of axes.
+    all(isone, dims) && return _mapreduce_scalar!(f, op, initop, arrays)
     dims, allstrides = order_and_fuse_dims(dims, map(strides, arrays))
     offsets = map(offset, arrays)
     costs = _computecosts(allstrides)
     return _mapreduce_block!(f, op, initop, dims, allstrides, offsets, costs, arrays)
 end
 
-# 0-dimensional fast path: bypass @generated kernel
+# Single-element fast path: bypass @generated kernel
 function _mapreduce_scalar!(f::F, op::OP, initop::I, arrays) where {F, OP, I}
     out = arrays[1]
     iout = ParentIndex(offset(out) + 1)
