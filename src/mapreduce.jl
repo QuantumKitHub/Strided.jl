@@ -142,12 +142,12 @@ end
 # order. The second permutation only moves singleton dimensions to the back.
 function order_and_fuse_dims(dims::Dims, allstrides::Tuple)
     stride_orders = map(indexorder, allstrides)
-    loop_order = _sortperm_desc(_importance(dims, stride_orders))
+    loop_order = _sortperm_descending(_importance(dims, stride_orders))
     ordered_dims = TupleTools.getindices(dims, loop_order)
     ordered_strides = map(s -> TupleTools.getindices(s, loop_order), allstrides)
 
     fused_dims = _fusedims(ordered_dims, ordered_strides)
-    active_order = _sortperm_desc(map(d -> Int(d > 1), fused_dims))
+    active_order = _sortperm_descending(map(d -> Int(d > 1), fused_dims))
     return TupleTools.getindices(fused_dims, active_order),
         map(s -> TupleTools.getindices(s, active_order), ordered_strides)
 end
@@ -163,12 +163,13 @@ function _importance(dims::NTuple{N, Int}, stride_orders::NTuple{M, NTuple{N, In
     return importance .* (dims .> 1)
 end
 
-# Small tuples have direct stable permutations; ties keep their original order.
-_sortperm_desc(::Tuple{}) = ()
-_sortperm_desc(::Tuple{Int}) = (1,)
-_sortperm_desc(values::NTuple{2, Int}) = ifelse(values[1] < values[2], (2, 1), (1, 2))
+# Return indices that order values from largest to smallest, preserving ties.
+# For example, (2, 5, 2) gives (2, 1, 3). Small tuples use direct permutations.
+_sortperm_descending(::Tuple{}) = ()
+_sortperm_descending(::Tuple{Int}) = (1,)
+_sortperm_descending(values::NTuple{2, Int}) = ifelse(values[1] < values[2], (2, 1), (1, 2))
 
-function _sortperm_desc(values::NTuple{3, Int})
+function _sortperm_descending(values::NTuple{3, Int})
     a, b, c = values
     if a >= b
         return b >= c ? (1, 2, 3) : a >= c ? (1, 3, 2) : (3, 1, 2)
@@ -178,7 +179,7 @@ function _sortperm_desc(values::NTuple{3, Int})
 end
 
 # Stable descending permutation: count larger values and earlier equal values.
-function _sortperm_desc(values::NTuple{N, Int}) where {N}
+function _sortperm_descending(values::NTuple{N, Int}) where {N}
     permutation = ntuple(identity, Val(N))
     issorted(values; rev = true) && return permutation
 
