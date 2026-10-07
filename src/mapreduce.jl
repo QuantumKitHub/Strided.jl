@@ -163,27 +163,22 @@ function _importance(dims::NTuple{N, Int}, stride_orders::NTuple{M, NTuple{N, In
     return importance .* (dims .> 1)
 end
 
-# Tiny tuples need at most one swap; longer tuples use comparison counting.
-_sortperm_desc(values::NTuple{N, Int}) where {N} =
-    N <= 2 ? _sortperm_desc_insertion(values) : _sortperm_desc_ranked(values)
+# Small tuples have direct stable permutations; ties keep their original order.
+_sortperm_desc(::Tuple{}) = ()
+_sortperm_desc(::Tuple{Int}) = (1,)
+_sortperm_desc(values::NTuple{2, Int}) = ifelse(values[1] < values[2], (2, 1), (1, 2))
 
-function _sortperm_desc_insertion(values::NTuple{N, Int}) where {N}
-    permutation = ntuple(identity, Val(N))
-    @inbounds for source in 2:N
-        position = source
-        while position > 1 && values[permutation[position - 1]] < values[permutation[position]]
-            permutation = TupleTools.setindex(
-                TupleTools.setindex(permutation, permutation[position], position - 1),
-                permutation[position - 1], position
-            )
-            position -= 1
-        end
+function _sortperm_desc(values::NTuple{3, Int})
+    a, b, c = values
+    if a >= b
+        return b >= c ? (1, 2, 3) : a >= c ? (1, 3, 2) : (3, 1, 2)
+    else
+        return a >= c ? (2, 1, 3) : b >= c ? (2, 3, 1) : (3, 2, 1)
     end
-    return permutation
 end
 
 # Stable descending permutation: count larger values and earlier equal values.
-function _sortperm_desc_ranked(values::NTuple{N, Int}) where {N}
+function _sortperm_desc(values::NTuple{N, Int}) where {N}
     permutation = ntuple(identity, Val(N))
     issorted(values; rev = true) && return permutation
 
