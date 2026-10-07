@@ -47,6 +47,11 @@ function Base.map(
     return map!(f, similar(a1, T), a1, A...)
 end
 
+# Note that here and below we have to specialize on the `f` and `op` arguments.
+# This is because the @generated kernel always specializes, so if the callers don't
+# we end up with a dynamic dispatch that has to box these variables, causing allocations
+# and overhead
+
 function Base.map!(
         f::F, b::StridedView{<:Any, N}, a1::StridedView{<:Any, N},
         A::Vararg{StridedView{<:Any, N}}
