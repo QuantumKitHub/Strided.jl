@@ -72,6 +72,7 @@ function promoteshape(sz::Dims, a1::StridedView, As...)
 end
 promoteshape(sz::Dims) = ()
 function promoteshape1(sz::Dims{N}, a::StridedView) where {N}
+    size(a) == sz && return a
     newstrides = ntuple(Val(N)) do d
         if size(a, d) == sz[d]
             stride(a, d)
@@ -81,7 +82,12 @@ function promoteshape1(sz::Dims{N}, a::StridedView) where {N}
             throw(DimensionMismatch("array could not be broadcasted to match destination"))
         end
     end
-    return StridedView(a.parent, sz, newstrides, a.offset, a.op)
+
+    # bypass default constructor to avoid unnecessary stride normalization:
+    # a is already normalized, singleton-axis strides do not affect iteration.
+    return StridedView{eltype(a), N, typeof(a.parent), typeof(a.op)}(
+        a.parent, sz, newstrides, a.offset, a.op
+    )
 end
 
 struct CaptureArgs{F, Args <: Tuple}
