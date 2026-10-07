@@ -128,7 +128,7 @@ end
 function Strided._mapreduce_block!(
         f, op, initop,
         dims::Dims{N},
-        strides, offsets, costs, strideorders,
+        strides, offsets, costs,
         arrays::Tuple{GPUStridedView{TO, N}, Vararg{GPUStridedView{<:Any, N}}}
     ) where {TO, N}
 

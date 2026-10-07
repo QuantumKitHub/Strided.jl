@@ -138,23 +138,17 @@ function _fusedims(dims, allstrides)
     return dims
 end
 
-# Compute stride orders once: fusing only changes dimensions, so the surviving
-# dimensions retain their importance order and singleton dimensions move last.
-@inline function _mapreduce_plan(dims::Dims, allstrides::Tuple)
+# Compute stride orders once for dimension ordering: fusing only changes sizes,
+# so surviving dimensions retain their importance order and singleton dimensions
+# move last.
+function order_and_fuse_dims(dims::Dims, allstrides::Tuple)
     orders = map(indexorder, allstrides)
     p1 = _sortperm_desc(_importance(dims, orders))
     strides1 = map(s -> TupleTools.getindices(s, p1), allstrides)
     dims1 = _fusedims(TupleTools.getindices(dims, p1), strides1)
     p2 = _sortperm_desc(map(d -> Int(d > 1), dims1))
-    p = TupleTools.getindices(p1, p2)
     return TupleTools.getindices(dims1, p2),
-        map(s -> TupleTools.getindices(s, p2), strides1),
-        map(o -> TupleTools.getindices(o, p), orders)
-end
-
-function order_and_fuse_dims(dims, allstrides)
-    dims, allstrides, _ = _mapreduce_plan(dims, allstrides)
-    return dims, allstrides
+        map(s -> TupleTools.getindices(s, p2), strides1)
 end
 
 # Weight the output array twice when choosing a cache-friendly loop order.
@@ -186,14 +180,14 @@ _computecosts(strides) = map(a -> ifelse(iszero(a), 1, a << 1), map(min, strides
 
 # Pipeline entry point: order → fuse → order → block → kernel.
 # Fusing needs ordered entries, and final order pass brings remaining dim 1 to end
-@inline function _mapreduce_order!(
+function _mapreduce_order!(
         f::F, op::OP, initop::I, dims::Dims, arrays::Tuple{Vararg{StridedView}}
     ) where {F, OP, I}
     isempty(dims) && return _mapreduce_scalar!(f, op, initop, arrays)
-    dims, allstrides, strideorders = _mapreduce_plan(dims, map(strides, arrays))
+    dims, allstrides = order_and_fuse_dims(dims, map(strides, arrays))
     offsets = map(offset, arrays)
     costs = _computecosts(allstrides)
-    return _mapreduce_block!(f, op, initop, dims, allstrides, offsets, costs, strideorders, arrays)
+    return _mapreduce_block!(f, op, initop, dims, allstrides, offsets, costs, arrays)
 end
 
 # 0-dimensional fast path: bypass @generated kernel
@@ -212,10 +206,14 @@ end
 
 const MINTHREADLENGTH = 1 << 15 # minimal length before any kind of threading is applied
 function _mapreduce_block!(
-        f::F, op::OP, initop::I, dims, strides, offsets, costs, strideorders, arrays
+        f::F, op::OP, initop::I, dims, strides, offsets, costs, arrays
     ) where {F, OP, I}
     bytestrides = map((s, stride) -> s .* stride, sizeof.(eltype.(arrays)), strides)
+    strideorders = map(indexorder, strides)
     blocks = _computeblocks(dims, costs, bytestrides, strideorders)
+
+    # t = @elapsed _computeblocks(dims, costs, bytestrides, strideorders)
+    # println("_computeblocks time: $t")
 
     if get_num_threads() == 1 || prod(dims) <= MINTHREADLENGTH
         _mapreduce_kernel!(f, op, initop, dims, blocks, arrays, strides, offsets)
