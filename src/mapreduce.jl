@@ -506,7 +506,7 @@ function _mapreduce_kernel_expr(f, op, initop, N::Int, M::Int)
             $pre2ex
             $pre3ex
             @inbounds $ex
-            return A1
+            return nothing
         end
     else
         for outer i in 1:N
@@ -527,7 +527,7 @@ function _mapreduce_kernel_expr(f, op, initop, N::Int, M::Int)
             $pre3ex
             $(initvars[N + 1]) = true
             @inbounds $ex
-            return A1
+            return nothing
         end
     end
     return ex
