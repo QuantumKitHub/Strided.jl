@@ -40,17 +40,22 @@ function Base._mapreduce_dim(f, op, ::NamedTuple{()}, A::StridedView, dims)
 end
 
 function Base.map(
-        @nospecialize(f), a1::StridedView{<:Any, N},
+        f::F, a1::StridedView{<:Any, N},
         A::Vararg{StridedView{<:Any, N}}
-    ) where {N}
+    ) where {F, N}
     T = Base.promote_op(f, eltype(a1), eltype.(A)...)
     return map!(f, similar(a1, T), a1, A...)
 end
 
+# Note that here and below we have to specialize on the `f` and `op` arguments.
+# This is because the @generated kernel always specializes, so if the callers don't
+# we end up with a dynamic dispatch that has to box these variables, causing allocations
+# and overhead
+
 function Base.map!(
-        @nospecialize(f), b::StridedView{<:Any, N}, a1::StridedView{<:Any, N},
+        f::F, b::StridedView{<:Any, N}, a1::StridedView{<:Any, N},
         A::Vararg{StridedView{<:Any, N}}
-    ) where {N}
+    ) where {F, N}
     dims = size(b)
 
     # Check dimesions
@@ -66,7 +71,7 @@ function Base.map!(
     return b
 end
 
-function _mapreduce(@nospecialize(f), @nospecialize(op), A::StridedView{T}, nt = nothing) where {T}
+function _mapreduce(f::F, op::OP, A::StridedView{T}, nt = nothing) where {F, OP, T}
     if isempty(A)
         b = Base.mapreduce_empty(f, op, T)
         return nt === nothing ? b : op(b, nt.init)
@@ -87,10 +92,10 @@ function _mapreduce(@nospecialize(f), @nospecialize(op), A::StridedView{T}, nt =
 end
 
 function Base.mapreducedim!(
-        @nospecialize(f), @nospecialize(op), b::StridedView{<:Any, N},
+        f::F, op::OP, b::StridedView{<:Any, N},
         a1::StridedView{<:Any, N},
         A::Vararg{StridedView{<:Any, N}}
-    ) where {N}
+    ) where {F, OP, N}
     outdims = size(b)
     dims = map(max, outdims, map(max, map(size, (a1, A...))...))
 
@@ -101,9 +106,8 @@ function Base.mapreducedim!(
 end
 
 function _mapreducedim!(
-        @nospecialize(f), @nospecialize(op), @nospecialize(initop),
-        dims::Dims, arrays::Tuple{Vararg{StridedView}}
-    )
+        f::F, op::OP, initop::I, dims::Dims, arrays::Tuple{Vararg{StridedView}}
+    ) where {F, OP, I}
     if any(isequal(0), dims)
         if length(arrays[1]) != 0 && !isnothing(initop)
             map!(initop, arrays[1], arrays[1])
@@ -167,9 +171,8 @@ _computecosts(strides) = map(a -> ifelse(iszero(a), 1, a << 1), map(min, strides
 # Pipeline entry point: order → fuse → order → block → kernel.
 # Fusing needs ordered entries, and final order pass brings remaining dim 1 to end
 function _mapreduce_order!(
-        @nospecialize(f), @nospecialize(op), @nospecialize(initop),
-        dims::Dims, arrays::Tuple{Vararg{StridedView}}
-    )
+        f::F, op::OP, initop::I, dims::Dims, arrays::Tuple{Vararg{StridedView}}
+    ) where {F, OP, I}
     isempty(dims) && return _mapreduce_scalar!(f, op, initop, arrays)
     dims, allstrides = order_and_fuse_dims(dims, map(strides, arrays))
     offsets = map(offset, arrays)
@@ -178,7 +181,7 @@ function _mapreduce_order!(
 end
 
 # 0-dimensional fast path: bypass @generated kernel
-function _mapreduce_scalar!(@nospecialize(f), @nospecialize(op), @nospecialize(initop), arrays)
+function _mapreduce_scalar!(f::F, op::OP, initop::I, arrays) where {F, OP, I}
     out = arrays[1]
     iout = ParentIndex(offset(out) + 1)
     v = f(map(a -> a[ParentIndex(offset(a) + 1)], Base.tail(arrays))...)
@@ -193,9 +196,8 @@ end
 
 const MINTHREADLENGTH = 1 << 15 # minimal length before any kind of threading is applied
 function _mapreduce_block!(
-        @nospecialize(f), @nospecialize(op), @nospecialize(initop),
-        dims, strides, offsets, costs, arrays
-    )
+        f::F, op::OP, initop::I, dims, strides, offsets, costs, arrays
+    ) where {F, OP, I}
     bytestrides = map((s, stride) -> s .* stride, sizeof.(eltype.(arrays)), strides)
     strideorders = map(indexorder, strides)
     blocks = _computeblocks(dims, costs, bytestrides, strideorders)
@@ -254,10 +256,9 @@ end
 # nthreads: number of threads spacing: extra addition to offset of array 1, to account for
 # reduction
 function _mapreduce_threaded!(
-        @nospecialize(f), @nospecialize(op), @nospecialize(initop),
-        dims, blocks, strides, offsets, costs, arrays, nthreads,
+        f::F, op::OP, initop::I, dims, blocks, strides, offsets, costs, arrays, nthreads,
         spacing, taskindex
-    )
+    ) where {F, OP, I}
     if nthreads == 1 || prod(dims) <= MINTHREADLENGTH
         offset1 = offsets[1] + spacing * (taskindex - 1)
         spacedoffsets = (offset1, Base.tail(offsets)...)
