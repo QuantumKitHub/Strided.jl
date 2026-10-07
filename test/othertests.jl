@@ -161,6 +161,24 @@ end
 
         R3 = rand(T, (5, 5, 5))
         @test prod(exp, StridedView(R3)) ≈ exp(sum(StridedView(R3)))
+
+        # Large enough to exercise threaded reduction, with offsets in both views.
+        n = 2 * Strided.MINTHREADLENGTH
+        input = sview(StridedView(fill(T(2), n + 20)), 11:(n + 10))
+        for initop in (nothing, zero, x -> 3x)
+            storage = StridedView(fill(T(99), 12))
+            output = sview(storage, 5:5)
+            fill!(output, T(7))
+            if initop === nothing
+                Base.mapreducedim!(identity, +, output, input)
+            else
+                Strided._mapreducedim!(identity, +, initop, (n,), (output, input))
+            end
+            initial = initop === nothing ? T(7) : initop(T(7))
+            expected = fill(T(99), 12)
+            expected[5] = initial + T(2) * n
+            @test Array(storage) == expected
+        end
     end
 end
 
