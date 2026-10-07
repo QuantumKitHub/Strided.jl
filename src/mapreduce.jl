@@ -209,22 +209,24 @@ function _mapreduce_block!(
         T = eltype(arrays[1])
         spacing = isbitstype(T) ? max(1, div(64, sizeof(T))) : 1 # to avoid false sharing
         threadedout = similar(arrays[1], spacing * get_num_threads())
-        a = arrays[1][ParentIndex(1)]
+        iout = ParentIndex(offsets[1] + 1)
+        a = arrays[1][iout]
         if initop !== nothing
             a = initop(a)
         end
         _init_reduction!(threadedout, f, op, a)
 
         newarrays = (threadedout, Base.tail(arrays)...)
+        newoffsets = (offset(threadedout), Base.tail(offsets)...)
         _mapreduce_threaded!(
-            f, op, nothing, dims, blocks, strides, offsets, costs,
+            f, op, nothing, dims, blocks, strides, newoffsets, costs,
             newarrays, get_num_threads(), spacing, 1
         )
 
         for i in 1:get_num_threads()
             a = op(a, threadedout[(i - 1) * spacing + 1])
         end
-        arrays[1][ParentIndex(1)] = a
+        arrays[1][iout] = a
     else
         costs = costs .* .!(iszero.(strides[1]))
         # make cost of dimensions with zero stride in output array (reduction dimensions),
