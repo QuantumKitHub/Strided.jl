@@ -21,6 +21,7 @@ if !is_buildkite
     Strided.disable_threads()
     include("othertests.jl")
     include("blasmultests.jl")
+    include("batched_permutedims.jl")
 
     if Base.Threads.nthreads() > 1
         println("Running tests multi-threaded:")
@@ -28,6 +29,7 @@ if !is_buildkite
         Strided.set_num_threads(Base.Threads.nthreads() + 1)
         include("othertests.jl")
         include("blasmultests.jl")
+        include("batched_permutedims.jl")
 
         Strided.enable_threaded_mul()
         include("blasmultests.jl")
