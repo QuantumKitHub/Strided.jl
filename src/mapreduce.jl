@@ -118,26 +118,6 @@ function _mapreducedim!(
     return arrays[1]
 end
 
-# Cache-friendly reordering of the loop dimensions: put the most important
-# (smallest-stride, most contiguous) dimension first and size-1 dimensions last.
-# The importance of each dimension is modelled from the `indexorder` of every
-# array's strides, with the output array (`strides[1]`) weighted by a factor 2.
-# `strides` is the per-array tuple-of-tuples; returns the reordered `(dims, strides)`.
-function _sortdims(dims, strides)
-    M = length(strides)
-    N = length(dims)
-    # ceil(Int, log2(M+2)) # to account for the fact that there are M arrays, where the first one is counted with a factor 2
-    g = 8 * sizeof(Int) - leading_zeros(M + 1)
-    importance = 2 .* (1 .<< (g .* (N .- indexorder(strides[1]))))
-    for k in 2:M
-        importance = importance .+ (1 .<< (g .* (N .- indexorder(strides[k]))))
-    end
-
-    importance = importance .* (dims .> 1) # put dims 1 at the back
-    p = TupleTools.sortperm(importance; rev = true)
-    return TupleTools.getindices(dims, p), broadcast(TupleTools.getindices, strides, (p,))
-end
-
 # Fuse dimensions if possible: merge dimension `i` into `i-1` when the two are
 # contiguous in *every* array (`s[i] == dims[i-1] * s[i-1]`).
 # Merged dimensions fold their extent into `i-1` and become size 1.
@@ -158,10 +138,29 @@ function _fusedims(dims, allstrides)
     return dims
 end
 
-function order_and_fuse_dims(dims, allstrides)
-    dims, allstrides = _sortdims(dims, allstrides)
-    dims = _fusedims(dims, allstrides)
-    return _sortdims(dims, allstrides)
+# Fusing only changes sizes, so surviving dimensions retain their importance
+# order. The second permutation only moves singleton dimensions to the back.
+function order_and_fuse_dims(dims::Dims, allstrides::Tuple)
+    stride_orders = map(indexorder, allstrides)
+    loop_order = TupleTools.sortperm(_importance(dims, stride_orders); rev = true)
+    ordered_dims = TupleTools.getindices(dims, loop_order)
+    ordered_strides = map(s -> TupleTools.getindices(s, loop_order), allstrides)
+
+    fused_dims = _fusedims(ordered_dims, ordered_strides)
+    active_order = TupleTools.sortperm(map(d -> Int(d > 1), fused_dims); rev = true)
+    return TupleTools.getindices(fused_dims, active_order),
+        map(s -> TupleTools.getindices(s, active_order), ordered_strides)
+end
+
+# Each stride rank gets enough bits to hold all array votes without carries.
+# The output array gets two votes; each input gets one.
+function _importance(dims::NTuple{N, Int}, stride_orders::NTuple{M, NTuple{N, Int}}) where {N, M}
+    bits_per_rank = 8 * sizeof(Int) - leading_zeros(M + 1) # ceil(Int, log2(M + 2))
+    importance = 2 .* (1 .<< (bits_per_rank .* (N .- stride_orders[1])))
+    for k in 2:M
+        importance = importance .+ (1 .<< (bits_per_rank .* (N .- stride_orders[k])))
+    end
+    return importance .* (dims .> 1)
 end
 
 # Per-dimension cost used by the blocking and thread-splitting heuristics,
@@ -546,8 +545,7 @@ end
 end
 
 function indexorder(strides::NTuple{N, Int}) where {N}
-    # returns order such that strides[i] is the order[i]th smallest element of strides, not
-    # counting zero strides zero strides have order 1
+    # Rank absolute nonzero strides. Ties share a rank; zero strides get rank 1.
     return ntuple(Val(N)) do i
         si = abs(strides[i])
         iszero(si) && return 1
