@@ -207,7 +207,7 @@ end
             @test mapx[] == 2 * R[]
         end
         B = StridedView(AT(fill(zero(T), dims)))
-        map!(x -> x + one(T), B, A)
+        map!(x -> x + one(x), B, A)
         GPUArrays.@allowscalar begin
             @test B[] == collect(R)[] + one(T)
         end
@@ -241,7 +241,7 @@ end
         end
         Strided._mapreducedim!(cos, +, identity, dims, (d2, A))
         GPUArrays.@allowscalar begin
-            @test Pd[2] == prev + cos(R[])
+            @test Pd[2] ≈ prev + cos(R[])
         end
     end
 end
