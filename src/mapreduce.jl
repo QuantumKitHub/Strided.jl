@@ -155,7 +155,7 @@ end
 # Each stride rank gets enough bits to hold all array votes without carries.
 # The output array gets two votes; each input gets one.
 function _importance(dims::NTuple{N, Int}, stride_orders::NTuple{M, NTuple{N, Int}}) where {N, M}
-    bits_per_rank = 8 * sizeof(Int) - leading_zeros(M + 1)
+    bits_per_rank = 8 * sizeof(Int) - leading_zeros(M + 1) # ceil(Int, log2(M + 2))
     importance = 2 .* (1 .<< (bits_per_rank .* (N .- stride_orders[1])))
     for k in 2:M
         importance = importance .+ (1 .<< (bits_per_rank .* (N .- stride_orders[k])))
