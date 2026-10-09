@@ -1,6 +1,6 @@
 name = "Strided"
 uuid = "5e0ebb24-38b0-5f93-81fe-25c709ecae67"
-version = "2.6.5"
+version = "2.6.6"
 authors = ["Lukas Devos <lukas.devos@ugent.be>", "Maarten Van Damme <maartenvd1994@gmail.com>", "Jutho Haegeman <jutho.haegeman@ugent.be>"]
 
 [deps]
@@ -26,8 +26,8 @@ Adapt = "4"
 CUDACore = "6"
 cuBLAS = "6"
 cuRAND = "6"
-GPUArrays = "11.4.1"
-JLArrays = "0.3.1"
+GPUArrays = "11.4.1, 12"
+JLArrays = "0.3.1, 0.4"
 LinearAlgebra = "1.6"
 Metal = "1.9"
 PrecompileTools = "1"
