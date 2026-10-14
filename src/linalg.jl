@@ -148,7 +148,7 @@ function _threaded_blas_mul!(
     end
     nthreads1 = nthreads >> 1
     nthreads2 = nthreads - nthreads1
-    t = Threads.@spawn _threaded_blas_mul!(Chead, Ahead, CA, Bhead, CB, α, β, nthreads1)
+    t = Threads.@spawn _threaded_blas_mul!($Chead, $Ahead, CA, $Bhead, CB, α, β, nthreads1)
     _threaded_blas_mul!(Ctail, Atail, CA, Btail, CB, α, β, nthreads2)
     wait(t)
     return C
