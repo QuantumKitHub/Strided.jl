@@ -96,3 +96,18 @@ end
     C1 = StridedView(copy(C))
     @test mul!(C, A, B, α, β) ≈ mul!(C1, A1, B1, α, β)
 end
+
+# small enough to never be split over threads, such that no tasks need to be spawned
+blasmul_allocations(C, A, B, α, β) = @allocated mul!(C, A, B, α, β)
+@testset "Matrix multiplication with StridedView does not allocate: $T" for T in (Float64, ComplexF64)
+    d = 8
+    A = StridedView(rand(T, (d, d)))
+    B = StridedView(rand(T, (d, d)))
+    C = StridedView(rand(T, (d, d)))
+    α = rand(T)
+    β = rand(T)
+    for op1 in (identity, conj, transpose, adjoint), op2 in (identity, conj, transpose, adjoint)
+        blasmul_allocations(C, op1(A), op2(B), α, β) # compile
+        @test blasmul_allocations(C, op1(A), op2(B), α, β) == 0
+    end
+end
