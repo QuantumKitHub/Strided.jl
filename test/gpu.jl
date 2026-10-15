@@ -191,13 +191,13 @@ end
         A = StridedView(AT(R))
         @test size(A) == dims
 
-        # full reductions
+        # full reductions; `abs` and `abs2` may round differently on the device
         @test sum(A) == sum(R)
         @test prod(A) == prod(R)
-        @test mapreduce(abs2, +, A) == mapreduce(abs2, +, R)
-        @test maximum(abs, A) == maximum(abs, R)
-        @test minimum(abs, A) == minimum(abs, R)
-        @test sum(abs2, A) == sum(abs2, R)
+        @test mapreduce(abs2, +, A) ≈ mapreduce(abs2, +, R)
+        @test maximum(abs, A) ≈ maximum(abs, R)
+        @test minimum(abs, A) ≈ minimum(abs, R)
+        @test sum(abs2, A) ≈ sum(abs2, R)
         @test mapreduce(identity, +, A; init = one(T)) ==
             mapreduce(identity, +, R; init = one(T))
 
