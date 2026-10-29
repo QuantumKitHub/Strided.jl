@@ -497,10 +497,12 @@ function _mapreduce_kernel_expr(f, op, initop, N::Int, M::Int)
     if initop === Nothing
         for outer i in 1:N
             ex = quote
-                for $(blockloopvars[i]) in 1:blocks[$i]:dims[$i]
+                $(blockloopvars[i]) = 1
+                while $(blockloopvars[i]) <= dims[$i]
                     $(blockdimvars[i]) = min(blocks[$i], dims[$i] - $(blockloopvars[i]) + 1)
                     $ex
                     $(outerstepstrideex[i])
+                    $(blockloopvars[i]) += blocks[$i]
                 end
                 $(outerreturnstrideex[i])
             end
@@ -516,11 +518,13 @@ function _mapreduce_kernel_expr(f, op, initop, N::Int, M::Int)
         for outer i in 1:N
             ex = quote
                 $(initvars[i]) = $(initvars[i + 1])
-                for $(blockloopvars[i]) in 1:blocks[$i]:dims[$i]
+                $(blockloopvars[i]) = 1
+                while $(blockloopvars[i]) <= dims[$i]
                     $(blockdimvars[i]) = min(blocks[$i], dims[$i] - $(blockloopvars[i]) + 1)
                     $ex
                     $(initvars[i]) &= $(stridevars[i, 1]) > 0
                     $(outerstepstrideex[i])
+                    $(blockloopvars[i]) += blocks[$i]
                 end
                 $(outerreturnstrideex[i])
             end
