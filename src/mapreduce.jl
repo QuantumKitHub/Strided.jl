@@ -532,6 +532,42 @@ function _mapreduce_kernel_expr(f, op, initop, N::Int, M::Int; unit::Bool = fals
     return ex
 end
 
+# Trailing singleton dimensions, e.g. those left by fusing dimensions, still cost a loop each.
+# Forward to the kernel of lower dimensionality instead, with the views rewrapped such that
+# this kernel is shared with arrays that have that dimensionality to begin with.
+function _mapreduce_trim_expr(N::Int, ex)
+    N > 1 || return ex
+    for k in 1:(N - 1)
+        ex = quote
+            if nactive == $k
+                dk = _firstk(dims, Val($k))
+                sk = _firstk(strides, Val($k))
+                return _mapreduce_kernel!(
+                    f, op, initop, dk, _firstk(blocks, Val($k)), _rewrap(arrays, dk, sk), sk, offsets
+                )
+            end
+            $ex
+        end
+    end
+    return quote
+        nactive = _lastnonsingleton(dims)
+        $ex
+    end
+end
+_firstk(t::Tuple, ::Val{k}) where {k} = ntuple(i -> t[i], Val(k))
+_firstk(ts::Tuple{Vararg{Tuple}}, v::Val) = map(t -> _firstk(t, v), ts)
+function _lastnonsingleton(dims::Dims)
+    n = length(dims)
+    while n > 1 && dims[n] == 1
+        n -= 1
+    end
+    return n
+end
+# the kernel only indexes the parents, so the strides of the views need no normalization
+_rewrap(arrays, dims, strides) = map(arrays, strides) do a, s
+    return StridedViews.unsafe_stridedview(eltype(a), parent(a), dims, s, offset(a), a.op)
+end
+
 @generated function _mapreduce_kernel!(
         (f), (op),
         (initop), dims::NTuple{N, Int},
@@ -540,16 +576,17 @@ end
         strides::NTuple{M, NTuple{N, Int}},
         offsets::NTuple{M, Int}
     ) where {N, M}
-    op === Nothing || return _mapreduce_kernel_expr(f, op, initop, N, M)
+    op === Nothing || return _mapreduce_trim_expr(N, _mapreduce_kernel_expr(f, op, initop, N, M))
     # select the unit-stride variant of the innermost loop once, instead of in every iteration
     unitcond = Expr(:call, :all, :(==(1)), Expr(:tuple, (:(strides[$j][1]) for j in 1:M)...))
-    return quote
+    ex = quote
         if $unitcond
             $(_mapreduce_kernel_expr(f, op, initop, N, M; unit = true))
         else
             $(_mapreduce_kernel_expr(f, op, initop, N, M; unit = false))
         end
     end
+    return _mapreduce_trim_expr(N, ex)
 end
 
 function indexorder(strides::NTuple{N, Int}) where {N}
