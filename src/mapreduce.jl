@@ -297,7 +297,7 @@ function _mapreduce_threaded!(
     return nothing
 end
 
-function _mapreduce_kernel_expr(f, op, initop, N::Int, M::Int)
+function _mapreduce_kernel_expr(f, op, initop, N::Int, M::Int; unit::Bool = false)
     @assert N > 0 "Cannot generate 0-dim kernel"
 
     # many variables
@@ -388,28 +388,19 @@ function _mapreduce_kernel_expr(f, op, initop, N::Int, M::Int)
     i = 1
     if op == Nothing
         # Non-reducing (map!/permute/...): each destination element is written once,
-        # so skip the reduction-only `iszero` hoist below and emit just the
-        # unit-stride and generic `@simd` loops.
+        # so skip the reduction-only `iszero` hoist below. Whether the innermost loop
+        # has unit stride is loop invariant, and is selected by the caller via `unit`.
         ex = Expr(:(=), lhsex, fcallex)
         if N >= 1
+            step1ex, step2ex = unit ? (unitstep1ex, unitstep2ex) : (stepstride1ex[i], stepstride2ex[i])
             ex = quote
-                if $unitstridecond
-                    @simd for $(innerloopvars[i]) in Base.OneTo($(blockdimvars[i]))
-                        $ex
-                        $unitstep1ex
-                        $unitstep2ex
-                    end
-                    $(returnstride1ex[i])
-                    $(returnstride2ex[i])
-                else
-                    @simd for $(innerloopvars[i]) in Base.OneTo($(blockdimvars[i]))
-                        $ex
-                        $(stepstride1ex[i])
-                        $(stepstride2ex[i])
-                    end
-                    $(returnstride1ex[i])
-                    $(returnstride2ex[i])
+                @simd for $(innerloopvars[i]) in Base.OneTo($(blockdimvars[i]))
+                    $ex
+                    $step1ex
+                    $step2ex
                 end
+                $(returnstride1ex[i])
+                $(returnstride2ex[i])
             end
         end
     else
@@ -497,10 +488,12 @@ function _mapreduce_kernel_expr(f, op, initop, N::Int, M::Int)
     if initop === Nothing
         for outer i in 1:N
             ex = quote
-                for $(blockloopvars[i]) in 1:blocks[$i]:dims[$i]
+                $(blockloopvars[i]) = 1
+                while $(blockloopvars[i]) <= dims[$i]
                     $(blockdimvars[i]) = min(blocks[$i], dims[$i] - $(blockloopvars[i]) + 1)
                     $ex
                     $(outerstepstrideex[i])
+                    $(blockloopvars[i]) += blocks[$i]
                 end
                 $(outerreturnstrideex[i])
             end
@@ -516,11 +509,13 @@ function _mapreduce_kernel_expr(f, op, initop, N::Int, M::Int)
         for outer i in 1:N
             ex = quote
                 $(initvars[i]) = $(initvars[i + 1])
-                for $(blockloopvars[i]) in 1:blocks[$i]:dims[$i]
+                $(blockloopvars[i]) = 1
+                while $(blockloopvars[i]) <= dims[$i]
                     $(blockdimvars[i]) = min(blocks[$i], dims[$i] - $(blockloopvars[i]) + 1)
                     $ex
                     $(initvars[i]) &= $(stridevars[i, 1]) > 0
                     $(outerstepstrideex[i])
+                    $(blockloopvars[i]) += blocks[$i]
                 end
                 $(outerreturnstrideex[i])
             end
@@ -545,7 +540,16 @@ end
         strides::NTuple{M, NTuple{N, Int}},
         offsets::NTuple{M, Int}
     ) where {N, M}
-    return _mapreduce_kernel_expr(f, op, initop, N, M)
+    op === Nothing || return _mapreduce_kernel_expr(f, op, initop, N, M)
+    # select the unit-stride variant of the innermost loop once, instead of in every iteration
+    unitcond = Expr(:call, :all, :(==(1)), Expr(:tuple, (:(strides[$j][1]) for j in 1:M)...))
+    return quote
+        if $unitcond
+            $(_mapreduce_kernel_expr(f, op, initop, N, M; unit = true))
+        else
+            $(_mapreduce_kernel_expr(f, op, initop, N, M; unit = false))
+        end
+    end
 end
 
 function indexorder(strides::NTuple{N, Int}) where {N}
