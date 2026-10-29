@@ -257,6 +257,42 @@ end
     end
 end
 
+@testset "permutedims! with α and β" begin
+    for T in (Float64, ComplexF64), N in 1:6, trial in 1:10
+        sz = ntuple(_ -> rand(1:(N > 3 ? 4 : 40)), N)
+        p = Tuple(randperm(N))
+        A = randn(T, map(i -> sz[i], invperm(p)))
+        C0 = randn(T, sz)
+        for (α, β) in ((1, 0), (0.5, 0), (2.0, 1), (0.3 + 0.2im, 0.7))
+            T <: Real && α isa Complex && continue
+            C = copy(C0)
+            permutedims!(StridedView(C), StridedView(A), p, α, β)
+            @test C ≈ β * C0 + α * permutedims(A, p)
+        end
+        # strided and conjugated views
+        Ab = randn(T, map(i -> 2 * sz[i], invperm(p)))
+        Cb = randn(T, map(x -> 2x, sz))
+        As = conj(StridedView(Ab)[map(n -> 1:2:(2n), map(i -> sz[i], invperm(p)))...])
+        Cs = StridedView(Cb)[map(n -> 2:2:(2n), sz)...]
+        Cref = 0.4 * Array(Cs) + 1.5 * permutedims(Array(As), p)
+        permutedims!(Cs, As, p, 1.5, 0.4)
+        @test Array(Cs) ≈ Cref
+    end
+    # C is not read if β is zero
+    C = fill(NaN, 3, 4)
+    A = rand(4, 3)
+    permutedims!(StridedView(C), StridedView(A), (2, 1), 1, 0)
+    @test C == permutedims(A, (2, 1))
+    # arrays that do not fit in a block
+    A = randn(40, 50, 30)
+    C = randn(30, 40, 50)
+    C0 = copy(C)
+    permutedims!(StridedView(C), StridedView(A), (3, 1, 2), 2.0, 0.5)
+    @test C ≈ 0.5 * C0 + 2 * permutedims(A, (3, 1, 2))
+    @test_throws DimensionMismatch permutedims!(StridedView(zeros(2, 3)), StridedView(zeros(2, 3)), (2, 1), 1, 0)
+    @test_throws ArgumentError permutedims!(StridedView(zeros(2, 2)), StridedView(zeros(2, 2)), (1, 1), 1, 0)
+end
+
 @testset "@strided macro" begin
     @testset for T in (Float32, Float64, ComplexF32, ComplexF64)
         A1, A2, A3 = rand(T, (10,)), rand(T, (10, 10)), rand(T, (10, 10, 10))

@@ -53,6 +53,7 @@ end
 
 include("linalg.jl")
 include("mapreduce.jl")
+include("permute.jl")
 include("broadcast.jl")
 include("macros.jl")
 include("convert.jl")

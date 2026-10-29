@@ -38,6 +38,8 @@ end
         @test compare(adjoint!, AT, A1, A2)
         @test compare(transpose!, AT, A1, A2)
         @test compare((x, y) -> permutedims!(x, y, (2, 1)), AT, A1, A2)
+        @test compare((x, y) -> permutedims!(x, y, (2, 1), 0.5, 0), AT, A1, A2)
+        @test compare((x, y) -> permutedims!(x, y, (2, 1), 0.5, 0.3), AT, A1, A2)
 
         B1 = A1[4:4:end, 1:4:end]
         B2 = A2[4:4:end, 1:4:end]
@@ -46,6 +48,8 @@ end
         @test compare(adjoint!, AT, B1, B2)
         @test compare(transpose!, AT, B1, B2)
         @test compare((x, y) -> permutedims!(x, y, (2, 1)), AT, B1, B2)
+        @test compare((x, y) -> permutedims!(x, y, (2, 1), 0.5, 0), AT, B1, B2)
+        @test compare((x, y) -> permutedims!(x, y, (2, 1), 0.5, 0.3), AT, B1, B2)
     end
 end
 
