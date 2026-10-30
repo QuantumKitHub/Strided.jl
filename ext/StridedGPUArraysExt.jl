@@ -190,6 +190,7 @@ function Strided.blas_mul!(
         C::GPUStridedView{T, 2}, A::GPUStridedView{T, 2}, B::GPUStridedView{T, 2},
         α::Number, β::Number
     ) where {T <: LinearAlgebra.BlasFloat}
+    isempty(C) && return C
     isblasmatrix(C) || return Strided.__mul!(C, A, B, α, β)
     LinearAlgebra.mul!(_densematrix(C), _densematrix(A), _densematrix(B), convert(T, α), convert(T, β))
     return C
