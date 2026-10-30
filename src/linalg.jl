@@ -99,7 +99,7 @@ function _mul!(
         C::StridedView{T, 2}, A::StridedView{T, 2}, B::StridedView{T, 2},
         α::Number, β::Number
     ) where {T <: LinearAlgebra.BlasFloat}
-    if stride(C, 1) == 1 && isblasmatrix(A) && isblasmatrix(B)
+    if isblasmatrix(A) && isblasmatrix(B) && isblasmatrix(C)
         return blas_mul!(C, A, B, α, β)
     else
         return __mul!(C, A, B, α, β)
