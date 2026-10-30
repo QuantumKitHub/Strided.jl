@@ -15,9 +15,9 @@ cuBLAS = "182d3088-87b7-4494-8cad-fc6afaa545bc"
 GPUArrays = "0c68f7d7-f131-5f86-a1c3-88cf8149b2d7"
 
 [extensions]
-StridedcuBLASExt = "cuBLAS"
+StridedcuBLASExt = ["GPUArrays", "cuBLAS"]
 StridedGPUArraysExt = "GPUArrays"
-StridedAMDGPUExt = "AMDGPU"
+StridedAMDGPUExt = ["AMDGPU", "GPUArrays"]
 
 [compat]
 AMDGPU = "2"
