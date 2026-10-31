@@ -73,7 +73,6 @@ function LinearAlgebra.mul!(
 end
 
 function isblasmatrix(A::StridedView{T, 2}) where {T <: LinearAlgebra.BlasFloat}
-    pointer(A) isa Ptr || return false
     if A.op == identity
         return stride(A, 1) == 1 || stride(A, 2) == 1
     elseif A.op == conj
@@ -82,7 +81,8 @@ function isblasmatrix(A::StridedView{T, 2}) where {T <: LinearAlgebra.BlasFloat}
         return false
     end
 end
-function getblasmatrix(A::StridedView{T, 2}) where {T <: LinearAlgebra.BlasFloat}
+getblasmatrix(A::StridedView{T, 2}) where {T <: LinearAlgebra.BlasFloat} = _blasview(A)
+function _blasview(A::StridedView{T, 2}) where {T <: LinearAlgebra.BlasFloat}
     if A.op == identity
         if stride(A, 1) == 1
             return A, 'N'
@@ -99,7 +99,7 @@ function _mul!(
         C::StridedView{T, 2}, A::StridedView{T, 2}, B::StridedView{T, 2},
         α::Number, β::Number
     ) where {T <: LinearAlgebra.BlasFloat}
-    if stride(C, 1) == 1 && isblasmatrix(A) && isblasmatrix(B)
+    if isblasmatrix(A) && isblasmatrix(B) && isblasmatrix(C)
         return blas_mul!(C, A, B, α, β)
     else
         return __mul!(C, A, B, α, β)

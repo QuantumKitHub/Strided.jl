@@ -26,6 +26,22 @@ Metal.functional() && push!(ATs, MtlArray)
         @test !Strided.isblasmatrix(A2)
         A3 = view(conj!(A1), 1:4:20, 1:20) # stride(A3, 2) is not 1
         @test !Strided.isblasmatrix(A3)
+        A4 = view(A1, 1:20, 1:2:20) # unit stride, columns are not packed but do not overlap
+        @test Strided.isblasmatrix(A4)
+        A5 = sreshape(StridedView(AT(randn(T, 4, 5, 20))), (20, 20)) # parent has 3 dims
+        @test Strided.isblasmatrix(A5)
+        A6 = permutedims(A1, (2, 1)) # packed rows, used as 'T'
+        @test Strided.isblasmatrix(A6)
+        A7 = permutedims(view(A1, 1:10, 1:20), (2, 1)) # unit stride along rows, not packed
+        @test Strided.isblasmatrix(A7)
+        A8 = adjoint(view(A1, 1:10, 1:20)) # conj op with unit stride along rows, not packed
+        @test Strided.isblasmatrix(A8)
+        if T <: Complex
+            A9 = conj(view(A1, 1:10, 1:20)) # conj op without a transpose has no BLAS equivalent
+            @test !Strided.isblasmatrix(A9)
+        end
+        @test Strided.isblasmatrix(StridedView(AT(zeros(T, 0, 5)))) # empty matrices
+        @test Strided.isblasmatrix(StridedView(AT(zeros(T, 0, 0))))
     end
 end
 
@@ -67,6 +83,39 @@ end
             @test compare((C, A, B) -> mul!(C, A, B, α, β), AT, vA1, f1(vA2), f2(vA3))
         end
     end
+    # matrices reshaped out of higher-dimensional parents
+    rA1, rA2, rA3 = (StridedView(rand(T, (4, 8, 32))) for _ in 1:3)
+    @test compare(AT, rA1, rA2, rA3) do C, A, B
+        return mul!(sreshape(C, (32, 32)), sreshape(A, (32, 32)), sreshape(B, (32, 32)), α, β)
+    end
+    # packed A and B, but C has unit stride without packed columns
+    vA1 = view(StridedView(rand(T, (64, 32))), 1:32, 1:32)
+    vA2, vA3 = (StridedView(rand(T, (32, 32))) for _ in 1:2)
+    @test compare((C, A, B) -> mul!(C, A, B, α, β), AT, vA1, vA2, vA3)
+    # unit stride and non-packed columns and all transposition combinations
+    pA1, pA2, pA3 = (StridedView(rand(T, (64, 64))) for _ in 1:3)
+    for (r1, r2) in ((1:32, 1:32), (33:64, 33:64))
+        vA1 = view(pA1, 1:32, 1:32)
+        vA2 = view(pA2, r1, 1:32)
+        vA3 = view(pA3, r2, 33:64)
+        @testset for f1 in (identity, conj, adjoint, transpose), f2 in (identity, conj, adjoint, transpose)
+            @test compare((C, A, B) -> mul!(C, A, B, α, β), AT, vA1, f1(vA2), f2(vA3))
+        end
+    end
+    # conjugated views: non-packed adjoints as inputs, and conjugated non-packed destination
+    vA1, vA2, vA3 = (view(p, 1:32, 1:32) for p in (pA1, pA2, pA3))
+    @test compare((C, A, B) -> mul!(C, A', B', α, β), AT, vA1, vA2, vA3)
+    @test compare((C, A, B) -> mul!(C, conj(A), B, α, β), AT, vA1, vA2, vA3)
+    @test compare((C, A, B) -> mul!(conj(C), A', B, α, β), AT, vA1, vA2, vA3)
+    @test compare((C, A, B) -> mul!(C', A, B, α, β), AT, vA1, vA2, vA3)
+    # non-packed destination
+    vC = view(StridedView(rand(T, (64, 64))), 33:64, 1:32)
+    @test compare((C, A, B) -> mul!(C, A, B, α, β), AT, vC, view(pA2, 1:32, 1:32), view(pA3, 1:32, 1:32))
+    # empty matrices
+    @test compare(
+        (C, A, B) -> mul!(C, A, B, α, β), AT,
+        StridedView(zeros(T, 0, 5)), StridedView(zeros(T, 0, 3)), StridedView(zeros(T, 3, 5))
+    )
     # non-BLAS fallback path
     vA1 = view(StridedView(rand(T, (32, 32))), 1:32, 1:32)
     vA2 = view(StridedView(rand(T, (32, 64))), 1:32, 1:2:64)
