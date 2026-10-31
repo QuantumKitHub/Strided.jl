@@ -81,7 +81,8 @@ function isblasmatrix(A::StridedView{T, 2}) where {T <: LinearAlgebra.BlasFloat}
         return false
     end
 end
-function getblasmatrix(A::StridedView{T, 2}) where {T <: LinearAlgebra.BlasFloat}
+getblasmatrix(A::StridedView{T, 2}) where {T <: LinearAlgebra.BlasFloat} = _blasview(A)
+function _blasview(A::StridedView{T, 2}) where {T <: LinearAlgebra.BlasFloat}
     if A.op == identity
         if stride(A, 1) == 1
             return A, 'N'
