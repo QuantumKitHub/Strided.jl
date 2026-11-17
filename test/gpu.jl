@@ -11,6 +11,10 @@ function compare(f, AT::Type, xs...; kwargs...)
     return test_result(cpu_out, gpu_out; kwargs...)
 end
 
+# `A` with element operation `op`: for `Number`s, the public API only produces `identity` and
+# `conj` (`transpose`/`adjoint` become `permutedims` + `conj`), so construct the others directly
+withop(A::StridedView, op) = StridedView(parent(A), size(A), strides(A), A.offset, op)
+
 # types to test for
 ATs = []
 !is_buildkite && push!(ATs, JLArray)
@@ -178,6 +182,10 @@ end
             B2 = f2(copy(A2))
             @test compare((x, y) -> copy!(y, x), AT, B1, B2)
         end
+        # compare the parent of the destination, so that its op is not undone when reading it back
+        for op1 in (identity, conj, transpose, adjoint), op2 in (identity, conj, transpose, adjoint)
+            @test compare((x, y) -> parent(copy!(y, x)), AT, withop(A1, op1), withop(A3, op2))
+        end
     end
 end
 
@@ -214,6 +222,12 @@ end
         @test compare((x, y) -> Strided._mapreducedim!(cos, +, identity, ntuple(Returns(sz), N), (x, y)), AT, A1, A2)
         @test compare((x, y) -> Strided._mapreducedim!(cos, +, Returns(0), ntuple(Returns(sz), N), (x, y)), AT, A1, A2)
         @test compare((x, y) -> Strided._mapreducedim!(cos, +, conj, ntuple(Returns(sz), N), (x, y)), AT, A1, A2)
+        for op1 in (identity, conj, transpose, adjoint), op2 in (identity, conj, transpose, adjoint)
+            @test compare(AT, withop(A1, op1), withop(A2, op2)) do x, y
+                Strided._mapreducedim!(cos, +, nothing, ntuple(Returns(sz), N), (x, y))
+                return parent(x)
+            end
+        end
 
         β = rand(T)
         @test compare((x, y) -> Strided._mapreducedim!(cos, +, a -> β, ntuple(Returns(sz), N), (x, y)), AT, A1, A2)
