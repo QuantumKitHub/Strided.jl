@@ -30,16 +30,6 @@ end
 @inline _gpu_accum(::Nothing, acc, val) = val
 @inline _gpu_accum(op, acc, val) = op(acc, val)
 
-_kernel_op(::typeof(identity)) = false
-_kernel_op(::typeof(transpose)) = false
-_kernel_op(::typeof(conj)) = true
-_kernel_op(::typeof(adjoint)) = true
-_kernel_ops(arrays::Tuple{Vararg{StridedView{<:Number}}}) = map(a -> _kernel_op(_get_op(a)), arrays)
-_kernel_ops(arrays::Tuple) = map(_get_op, arrays)
-
-@inline _apply_op(isconj::Bool, x) = ifelse(isconj, conj(x), x)
-@inline _apply_op(op, x) = op(x)
-
 function Adapt.adapt_structure(to, p::Strided.KernelFlatParent)
     dA = Adapt.adapt(to, p.parent)
     return reshape(dA, length(dA))
@@ -66,7 +56,7 @@ end
     # Initialize accumulator from current output value (or apply initop)
     out = arrays[1]
     out_I_parent = Is_parent[1]
-    @inbounds acc = _gpu_init_acc(initop, _apply_op(ops[1], out[out_I_parent]))
+    @inbounds acc = _gpu_init_acc(initop, ops[1](out[out_I_parent]))
 
     inputs = Base.tail(arrays)
     inputs_I_parent = Base.tail(Is_parent)
@@ -79,12 +69,12 @@ end
         Is_inputs = inputs_I_parent .+ Is_red_parent
         # Get values from each input array, apply map function, and accumulate
         vals = map(inputs, inputs_ops, Is_inputs) do in, in_op, in_I
-            _apply_op(in_op, getindex(in, in_I))
+            in_op(getindex(in, in_I))
         end
         acc = _gpu_accum(op, acc, f(vals...))
     end
     # Write back result to output array
-    @inbounds out[out_I_parent] = _apply_op(ops[1], acc)
+    @inbounds out[out_I_parent] = ops[1](acc)
 end
 
 # GPU-compatible _mapreduce: avoids scalar indexing (first(A), out[ParentIndex(1)])
@@ -172,7 +162,7 @@ function Strided._mapreduce_block!(
     backend = KernelAbstractions.get_backend(parent(out))
     _launch_mapreduce!(
         backend, f, op, initop, dims_red, dims_out, strides, offsets,
-        _kernel_ops(arrays), map(Strided._kernel_parent, map(parent, arrays))
+        map(_get_op, arrays), map(Strided._kernel_parent, map(parent, arrays))
     )
     return nothing
 end
