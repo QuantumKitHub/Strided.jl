@@ -14,4 +14,6 @@ function Strided.blas_mul!(C::ROCStridedView{T, 2}, A::ROCStridedView{T, 2}, B::
     return C
 end
 
+Strided._kernel_parent(A::ROCArray) = Strided.KernelFlatParent(A)
+
 end

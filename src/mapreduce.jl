@@ -23,6 +23,16 @@ end
 # argument to dispatch so that only AMD arrays are affected.
 _get_op(A::StridedView) = A.op
 
+# The parent of a `StridedView` as it is passed to a mapreduce kernel. The CUDA and AMD
+# extensions wrap this parent in a `KernelFlatParent`, which the backend's
+# kernel-argument conversion turns into a 1-dimensional device array.
+# This stops kernel from specializing on the dimensionality of the parent and
+# inducing a lot of extra compilation.
+struct KernelFlatParent{A}
+    parent::A
+end
+_kernel_parent(A) = A
+
 function Base.mapreduce(f, op, A::StridedView; dims = :, kw...)
     return Base._mapreduce_dim(f, op, values(kw), A, dims)
 end
