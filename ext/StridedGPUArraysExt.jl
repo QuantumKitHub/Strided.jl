@@ -30,11 +30,6 @@ end
 @inline _gpu_accum(::Nothing, acc, val) = val
 @inline _gpu_accum(op, acc, val) = op(acc, val)
 
-function Adapt.adapt_structure(to, p::Strided.KernelFlatParent)
-    dA = Adapt.adapt(to, p.parent)
-    return reshape(dA, length(dA))
-end
-
 @inline function cartesian2parent(strides::NTuple{N, Int}, cidx::CartesianIndex{N}) where {N}
     s = 0
     for d in Base.OneTo(N)
@@ -162,7 +157,7 @@ function Strided._mapreduce_block!(
     backend = KernelAbstractions.get_backend(parent(out))
     _launch_mapreduce!(
         backend, f, op, initop, dims_red, dims_out, strides, offsets,
-        map(_get_op, arrays), map(Strided._kernel_parent, map(parent, arrays))
+        map(_get_op, arrays), map(parent, arrays)
     )
     return nothing
 end

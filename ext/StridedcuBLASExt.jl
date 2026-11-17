@@ -13,6 +13,4 @@ function Strided.blas_mul!(C::CuStridedView{T, 2}, A::CuStridedView{T, 2}, B::Cu
     return C
 end
 
-Strided._kernel_parent(A::CuArray) = Strided.KernelFlatParent(A)
-
 end

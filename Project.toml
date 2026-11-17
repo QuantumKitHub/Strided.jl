@@ -9,6 +9,9 @@ PrecompileTools = "aea7be01-6a6a-4083-8856-8a6e6704d82a"
 StridedViews = "4db3bf67-4bd7-4b4e-b153-31dc3fb37143"
 TupleTools = "9d95972d-f1c8-5527-a6e0-b4b365fa01f6"
 
+[sources]
+StridedViews = {url = "https://github.com/QuantumKitHub/StridedViews.jl", rev = "main"}
+
 [weakdeps]
 AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
 cuBLAS = "182d3088-87b7-4494-8cad-fc6afaa545bc"
