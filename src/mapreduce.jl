@@ -59,9 +59,9 @@ function Base.map!(
     dims = size(b)
 
     # Check dimesions
-    size(a1) == dims || throw(DimensionMismatch())
+    size(a1) == dims || _throw_dimensionmismatch()
     for a in A
-        size(a) == dims || throw(DimensionMismatch())
+        size(a) == dims || _throw_dimensionmismatch()
     end
 
     any(isequal(0), dims) && return b # don't do anything

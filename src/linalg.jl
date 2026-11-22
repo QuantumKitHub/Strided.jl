@@ -58,7 +58,7 @@ function LinearAlgebra.mul!(
     # handle the empty arrays anyway
     if iszero(size(A, 2))
         (size(C, 1) == size(A, 1) && size(C, 2) == size(B, 2) && iszero(size(B, 1))) ||
-            throw(DimensionMismatch("A has size $(size(A)), B has size $(size(B)), C has size $(size(C))"))
+            _throw_mul_dimensionmismatch(size(A), size(B), size(C))
         return _scale!(C, β)
     end
     if !(eltype(C) <: LinearAlgebra.BlasFloat && eltype(A) == eltype(B) == eltype(C))
@@ -122,7 +122,7 @@ function blas_mul!(
         α::Number, β::Number
     ) where {T <: LinearAlgebra.BlasFloat}
     m, n = size(C)
-    m == size(A, 1) && n == size(B, 2) || throw(DimensionMismatch())
+    m == size(A, 1) && n == size(B, 2) || _throw_dimensionmismatch()
     nthreads = use_threaded_mul() ? get_num_threads() : 1
     A2, CA = getblasmatrix(A)
     B2, CB = getblasmatrix(B)
@@ -170,7 +170,7 @@ function __mul!(
         α::Number, β::Number
     )
     (size(C, 1) == size(A, 1) && size(C, 2) == size(B, 2) && size(A, 2) == size(B, 1)) ||
-        throw(DimensionMismatch("A has size $(size(A)), B has size $(size(B)), C has size $(size(C))"))
+        _throw_mul_dimensionmismatch(size(A), size(B), size(C))
 
     m, n = size(C)
     k = size(A, 2)

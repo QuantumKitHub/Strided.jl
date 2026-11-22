@@ -79,7 +79,7 @@ function promoteshape1(sz::Dims{N}, a::StridedView) where {N}
         elseif size(a, d) == 1
             0
         else
-            throw(DimensionMismatch("array could not be broadcasted to match destination"))
+            _throw_broadcast_dimensionmismatch()
         end
     end
 
