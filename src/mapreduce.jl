@@ -195,7 +195,7 @@ _computecosts(strides) = map(a -> ifelse(iszero(a), 1, a << 1), map(min, strides
 # Inputs with at most this many elements skip the loop ordering and blocking, and run the
 # kernel in the given loop order (after fusing contiguous dimensions): at these sizes
 # everything is cache resident, and the fixed cost of planning outweighs what it saves.
-const MAXNAIVELENGTH = 1 << 10
+const MAXNAIVELENGTH = 1 << 12
 
 # The given loop order is only used if the destination is traversed in memory order: unit
 # stride along the first dimension and increasing strides along the remaining ones.
