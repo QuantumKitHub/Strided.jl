@@ -214,7 +214,7 @@ function _mapreduce_order!(
     if prod(dims) <= MAXNAIVELENGTH && _isnaturalorder(dims, strides(arrays[1]))
         fdims = _fusedims(dims, map(strides, arrays))
         fused = map(a -> _relayout(a, fdims, strides(a)), arrays)
-        return _mapreduce_kernel!(f, op, initop, fdims, fused)
+        return _mapreduce_kernel!(f, op, initop, nothing, fused)
     end
     return _mapreduce_block!(f, op, initop, order_and_fuse_dims(arrays))
 end
@@ -335,7 +335,9 @@ end
     return (shifted, Base.tail(arrays)...)
 end
 
-function _mapreduce_kernel_expr(f, op, initop, N::Int, M::Int; unit::Bool = false)
+function _mapreduce_kernel_expr(
+        f, op, initop, N::Int, M::Int; unit::Bool = false, blocked::Bool = true
+    )
     @assert N > 0 "Cannot generate 0-dim kernel"
 
     # many variables
@@ -524,6 +526,20 @@ function _mapreduce_kernel_expr(f, op, initop, N::Int, M::Int; unit::Bool = fals
         end
     end
 
+    if !blocked
+        # a single block spanning the full dimensions: no block loops needed
+        dimsex = Expr(:block, (:($(blockdimvars[i]) = dims[$i]) for i in 1:N)...)
+        return quote
+            $pre1ex
+            $pre2ex
+            $pre3ex
+            $dimsex
+            $(initvars[1]) = true
+            @inbounds $ex
+            return nothing
+        end
+    end
+
     if initop === Nothing
         for outer i in 1:N
             ex = quote
@@ -572,18 +588,24 @@ function _mapreduce_kernel_expr(f, op, initop, N::Int, M::Int; unit::Bool = fals
 end
 
 # The loop bounds, strides and offsets are all taken from `arrays`, which have to share the
-# same size; `blocks` holds the block size for each dimension.
+# same size; `blocks` holds the block size for each dimension, or is `nothing` to loop over
+# the full dimensions without blocking.
 @generated function _mapreduce_kernel!(
-        (f), (op), (initop), blocks::NTuple{N, Int}, arrays::NTuple{M, StridedView}
-    ) where {N, M}
-    op === Nothing || return _mapreduce_kernel_expr(f, op, initop, N, M)
+        (f), (op), (initop), blocks::Union{Nothing, Dims},
+        arrays::Tuple{StridedView, Vararg{StridedView}}
+    )
+    N = ndims(fieldtype(arrays, 1))
+    M = fieldcount(arrays)
+    blocked = blocks !== Nothing
+    op === Nothing || return _mapreduce_kernel_expr(f, op, initop, N, M; blocked)
     # select the unit-stride variant of the innermost loop once, instead of in every iteration
     unitcond = Expr(:call, :all, :(==(1)), Expr(:tuple, (:(stride(arrays[$j], 1)) for j in 1:M)...))
     return quote
+        $(blocked ? nothing : Expr(:meta, :inline))
         if $unitcond
-            $(_mapreduce_kernel_expr(f, op, initop, N, M; unit = true))
+            $(_mapreduce_kernel_expr(f, op, initop, N, M; unit = true, blocked))
         else
-            $(_mapreduce_kernel_expr(f, op, initop, N, M; unit = false))
+            $(_mapreduce_kernel_expr(f, op, initop, N, M; unit = false, blocked))
         end
     end
 end
