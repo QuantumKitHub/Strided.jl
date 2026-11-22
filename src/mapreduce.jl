@@ -150,6 +150,28 @@ _fusescan(::Tuple{}, ::Tuple{}) = ((), 1)
     return (ifelse(merges[1], 1, d), rest...), ifelse(merges[1], d, 1)
 end
 
+# The stride of a size 1 dimension does not affect the iteration, so it can be chosen freely.
+# Choose it such that `_fusedims` merges the dimension into its neighbour: for leading size 1
+# dimensions, use the stride of the first non-singleton dimension, and for the others use the
+# extent of the preceding dimension.
+# The latter matches the normalization of the `StridedView` constructor, but views created
+# internally (e.g. in `permutedims!` and `promoteshape`) skip it. The former is needed even for
+# normalized views: a leading size 1 dimension would otherwise block fusing, and makes the
+# input fail the natural-order check of the small-input path.
+@inline function _normalizesingletons(dims::NTuple{N, Int}, strides::NTuple{N, Int}) where {N}
+    sk = strides[N]
+    for i in N:-1:1
+        sk = ifelse(dims[i] > 1, strides[i], sk)
+    end
+    return first(_singletonscan(dims, strides, sk))
+end
+_singletonscan(::Tuple{}, ::Tuple{}, carry) = ((), carry)
+@inline function _singletonscan(dims::Tuple, strides::Tuple, carry)
+    s = ifelse(dims[1] == 1, carry, strides[1])
+    rest, _ = _singletonscan(tail(dims), tail(strides), dims[1] * s)
+    return (s, rest...), carry
+end
+
 # Construct a view with the given layout, bypassing the default constructor to avoid stride
 # normalization: zero strides (broadcast or reduction dimensions) have to survive.
 @inline function _relayout(
@@ -223,11 +245,13 @@ end
     len = prod(dims) # callers handle empty arrays
     # A single element needs no layout planning, regardless of the number of axes.
     len == 1 && return _mapreduce_scalar!(f, op, initop, arrays)
-    # fusing preserves the natural order, so it can be checked on the unfused dimensions
-    if len <= MAXNAIVELENGTH && _isnaturalorder(dims, strides(arrays[1]))
-        fdims = _fusedims(dims, map(strides, arrays))
-        fused = map(a -> _relayout(a, fdims, strides(a)), arrays)
-        return _mapreduce_kernel!(f, op, initop, nothing, fused)
+    if len <= MAXNAIVELENGTH
+        allstrides = map(s -> _normalizesingletons(dims, s), map(strides, arrays))
+        fdims = _fusedims(dims, allstrides)
+        if _isnaturalorder(fdims, allstrides[1])
+            fused = map((a, s) -> _relayout(a, fdims, s), arrays, allstrides)
+            return _mapreduce_kernel!(f, op, initop, nothing, fused)
+        end
     end
     return _mapreduce_block!(f, op, initop, order_and_fuse_dims(arrays))
 end
