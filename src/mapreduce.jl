@@ -4,7 +4,16 @@ Base.conj!(a::StridedView{<:Real}) = a
 Base.conj!(a::StridedView) = map!(conj, a, a)
 LinearAlgebra.adjoint!(dst::StridedView, src::StridedView) = copy!(dst, adjoint(src))
 LinearAlgebra.transpose!(C::StridedView, A::StridedView) = copy!(C, transpose(A))
-Base.permutedims!(dst::StridedView, src::StridedView, p) = copy!(dst, permutedims(src, p))
+# Same as `copy!(dst, permutedims(src, p))`, but skips normalizing the strides of the
+# permuted view, which the kernels don't need.
+function Base.permutedims!(
+        dst::StridedView{<:Any, N}, src::StridedView{<:Any, N}, p
+    ) where {N}
+    (length(p) == N && isperm(p)) || _throw_invalidperm(N, p)
+    newsize = ntuple(i -> @inbounds(size(src)[p[i]]), Val(N))
+    newstrides = ntuple(i -> @inbounds(strides(src)[p[i]]), Val(N))
+    return copy!(dst, _relayout(src, newsize, newstrides))
+end
 Base.fill!(A::StridedView, val) = map!(Returns(val), A, A)
 function Base.fill!(
         A::StridedView{<:Union{BigFloat, Complex{BigFloat}, BigInt, Complex{BigInt}}}, val
