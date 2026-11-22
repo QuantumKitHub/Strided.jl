@@ -121,7 +121,7 @@ end
 # Fuse dimensions if possible: merge dimension `i` into `i-1` when the two are
 # contiguous in *every* array (`s[i] == dims[i-1] * s[i-1]`).
 # Merged dimensions fold their extent into `i-1` and become size 1.
-function _fusedims(dims, allstrides)
+@inline function _fusedims(dims, allstrides)
     @inbounds for i in length(dims):-1:2
         merge = true
         for s in allstrides
@@ -188,7 +188,7 @@ const MAXNAIVELENGTH = 1 << 10
 # The given loop order is only used if the destination is traversed in memory order: unit
 # stride along the first dimension and increasing strides along the remaining ones.
 # Zero strides (reduction dimensions) beyond the first dimension are ignored.
-function _isnaturalorder(dims::Dims, dststrides::Dims)
+@inline function _isnaturalorder(dims::Dims, dststrides::Dims)
     (dims[1] > 1 && dststrides[1] == 1) || return false
     s = 1
     for i in 2:length(dims)
@@ -204,14 +204,15 @@ end
 #   order → fuse → order (reshaping the views) → block → kernel
 # Fusing needs ordered entries, and the final order pass brings remaining size 1 dims to the end.
 # Small inputs in a reasonable loop order only get fused, see `MAXNAIVELENGTH`.
-function _mapreduce_order!(
+@inline function _mapreduce_order!(
         f::F, op::OP, initop::I, arrays::Tuple{Vararg{StridedView}}
     ) where {F, OP, I}
     dims = size(arrays[1])
+    len = prod(dims) # callers handle empty arrays
     # A single element needs no layout planning, regardless of the number of axes.
-    all(isone, dims) && return _mapreduce_scalar!(f, op, initop, arrays)
+    len == 1 && return _mapreduce_scalar!(f, op, initop, arrays)
     # fusing preserves the natural order, so it can be checked on the unfused dimensions
-    if prod(dims) <= MAXNAIVELENGTH && _isnaturalorder(dims, strides(arrays[1]))
+    if len <= MAXNAIVELENGTH && _isnaturalorder(dims, strides(arrays[1]))
         fdims = _fusedims(dims, map(strides, arrays))
         fused = map(a -> _relayout(a, fdims, strides(a)), arrays)
         return _mapreduce_kernel!(f, op, initop, nothing, fused)
