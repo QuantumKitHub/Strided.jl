@@ -10,7 +10,7 @@ function Base.fill!(
         A::StridedView{<:Union{BigFloat, Complex{BigFloat}, BigInt, Complex{BigInt}}}, val
     )
     isempty(A) && return A
-    _mapreduce_order!(Returns(val), nothing, nothing, size(A), (A,))
+    _mapreduce_order!(Returns(val), nothing, nothing, (A,))
     return A
 end
 
@@ -66,7 +66,7 @@ function Base.map!(
 
     any(isequal(0), dims) && return b # don't do anything
 
-    _mapreduce_order!(f, nothing, nothing, dims, (b, a1, A...))
+    _mapreduce_order!(f, nothing, nothing, (b, a1, A...))
 
     return b
 end
@@ -113,7 +113,7 @@ function _mapreducedim!(
             map!(initop, arrays[1], arrays[1])
         end
     else
-        _mapreduce_order!(f, op, initop, dims, promoteshape(dims, arrays...))
+        _mapreduce_order!(f, op, initop, promoteshape(dims, arrays...))
     end
     return arrays[1]
 end
@@ -138,6 +138,15 @@ function _fusedims(dims, allstrides)
     return dims
 end
 
+# Construct a view with the given layout, bypassing the default constructor to avoid stride
+# normalization: zero strides (broadcast or reduction dimensions) have to survive.
+@inline function _relayout(
+        a::StridedView{T, <:Any, A, F}, sz::NTuple{N, Int}, st::NTuple{N, Int},
+        o::Int = a.offset
+    ) where {T, N, A, F}
+    return StridedView{T, N, A, F}(a.parent, sz, st, o, a.op)
+end
+
 # Fusing only changes sizes, so surviving dimensions retain their importance
 # order. The second permutation only moves singleton dimensions to the back.
 function order_and_fuse_dims(dims::Dims, allstrides::Tuple)
@@ -150,6 +159,10 @@ function order_and_fuse_dims(dims::Dims, allstrides::Tuple)
     active_order = TupleTools.sortperm(map(d -> Int(d > 1), fused_dims); rev = true)
     return TupleTools.getindices(fused_dims, active_order),
         map(s -> TupleTools.getindices(s, active_order), ordered_strides)
+end
+function order_and_fuse_dims(arrays::Tuple{Vararg{StridedView}})
+    dims, allstrides = order_and_fuse_dims(size(arrays[1]), map(strides, arrays))
+    return map((a, s) -> _relayout(a, dims, s), arrays, allstrides)
 end
 
 # Each stride rank gets enough bits to hold all array votes without carries.
@@ -167,17 +180,43 @@ end
 # derived from the minimum (doubled) stride across arrays.
 _computecosts(strides) = map(a -> ifelse(iszero(a), 1, a << 1), map(min, strides...))
 
-# Pipeline entry point: order → fuse → order → block → kernel.
-# Fusing needs ordered entries, and final order pass brings remaining dim 1 to end
+# Inputs with at most this many elements skip the loop ordering and blocking, and run the
+# kernel in the given loop order (after fusing contiguous dimensions): at these sizes
+# everything is cache resident, and the fixed cost of planning outweighs what it saves.
+const MAXNAIVELENGTH = 1 << 10
+
+# The given loop order is only used if the destination is traversed in memory order: unit
+# stride along the first dimension and increasing strides along the remaining ones.
+# Zero strides (reduction dimensions) beyond the first dimension are ignored.
+function _isnaturalorder(dims::Dims, dststrides::Dims)
+    (dims[1] > 1 && dststrides[1] == 1) || return false
+    s = 1
+    for i in 2:length(dims)
+        (dims[i] == 1 || iszero(dststrides[i])) && continue
+        dststrides[i] > s || return false
+        s = dststrides[i]
+    end
+    return true
+end
+
+# Pipeline entry point. All arrays are expected to have the same size, with broadcast and
+# reduction dimensions encoded as zero strides (see `promoteshape`).
+#   order → fuse → order (reshaping the views) → block → kernel
+# Fusing needs ordered entries, and the final order pass brings remaining size 1 dims to the end.
+# Small inputs in a reasonable loop order only get fused, see `MAXNAIVELENGTH`.
 function _mapreduce_order!(
-        f::F, op::OP, initop::I, dims::Dims, arrays::Tuple{Vararg{StridedView}}
+        f::F, op::OP, initop::I, arrays::Tuple{Vararg{StridedView}}
     ) where {F, OP, I}
+    dims = size(arrays[1])
     # A single element needs no layout planning, regardless of the number of axes.
     all(isone, dims) && return _mapreduce_scalar!(f, op, initop, arrays)
-    dims, allstrides = order_and_fuse_dims(dims, map(strides, arrays))
-    offsets = map(offset, arrays)
-    costs = _computecosts(allstrides)
-    return _mapreduce_block!(f, op, initop, dims, allstrides, offsets, costs, arrays)
+    # fusing preserves the natural order, so it can be checked on the unfused dimensions
+    if prod(dims) <= MAXNAIVELENGTH && _isnaturalorder(dims, strides(arrays[1]))
+        fdims = _fusedims(dims, map(strides, arrays))
+        fused = map(a -> _relayout(a, fdims, strides(a)), arrays)
+        return _mapreduce_kernel!(f, op, initop, fdims, fused)
+    end
+    return _mapreduce_block!(f, op, initop, order_and_fuse_dims(arrays))
 end
 
 # Single-element fast path: bypass @generated kernel
@@ -195,51 +234,51 @@ function _mapreduce_scalar!(f::F, op::OP, initop::I, arrays) where {F, OP, I}
 end
 
 const MINTHREADLENGTH = 1 << 15 # minimal length before any kind of threading is applied
-function _mapreduce_block!(
-        f::F, op::OP, initop::I, dims, strides, offsets, costs, arrays
-    ) where {F, OP, I}
-    bytestrides = map((s, stride) -> s .* stride, sizeof.(eltype.(arrays)), strides)
+function _mapreduce_block!(f::F, op::OP, initop::I, arrays) where {F, OP, I}
+    dims = size(arrays[1])
+    allstrides = map(strides, arrays)
+    costs = _computecosts(allstrides)
+    bytestrides = map((s, stride) -> s .* stride, sizeof.(eltype.(arrays)), allstrides)
     memoryregion = totalmemoryregion(dims, bytestrides)
     # When the estimated footprint fits, the full dimensions are already optimal.
     blocks = if memoryregion <= BLOCKMEMORYSIZE
         dims
     else
-        strideorders = map(indexorder, strides)
+        strideorders = map(indexorder, allstrides)
         _computeblocks(dims, costs, bytestrides, strideorders, BLOCKMEMORYSIZE, memoryregion)
     end
 
     if get_num_threads() == 1 || prod(dims) <= MINTHREADLENGTH
-        _mapreduce_kernel!(f, op, initop, dims, blocks, arrays, strides, offsets)
-    elseif op !== nothing && _length(dims, strides[1]) == 1 # complete reduction
-        T = eltype(arrays[1])
+        _mapreduce_kernel!(f, op, initop, blocks, arrays)
+    elseif op !== nothing && _length(dims, allstrides[1]) == 1 # complete reduction
+        out = arrays[1]
+        T = eltype(out)
         spacing = isbitstype(T) ? max(1, div(64, sizeof(T))) : 1 # to avoid false sharing
-        threadedout = similar(arrays[1], spacing * get_num_threads())
-        iout = ParentIndex(offsets[1] + 1)
-        a = arrays[1][iout]
+        threadedout = similar(out, spacing * get_num_threads())
+        iout = ParentIndex(offset(out) + 1)
+        a = out[iout]
         if initop !== nothing
             a = initop(a)
         end
         _init_reduction!(threadedout, f, op, a)
 
-        newarrays = (threadedout, Base.tail(arrays)...)
-        newoffsets = (offset(threadedout), Base.tail(offsets)...)
+        # all strides of the output are zero, so the partial results only differ by offset
+        newarrays = (_relayout(threadedout, dims, allstrides[1]), Base.tail(arrays)...)
         _mapreduce_threaded!(
-            f, op, nothing, dims, blocks, strides, newoffsets, costs,
-            newarrays, get_num_threads(), spacing, 1
+            f, op, nothing, blocks, costs, newarrays, get_num_threads(), spacing, 1
         )
 
         for i in 1:get_num_threads()
             a = op(a, threadedout[(i - 1) * spacing + 1])
         end
-        arrays[1][iout] = a
+        out[iout] = a
     else
-        costs = costs .* .!(iszero.(strides[1]))
+        costs = costs .* .!(iszero.(allstrides[1]))
         # make cost of dimensions with zero stride in output array (reduction dimensions),
         # so that they are not divided in threading (which would lead to race conditions)
 
         _mapreduce_threaded!(
-            f, op, initop, dims, blocks, strides, offsets, costs, arrays,
-            get_num_threads(), 0, 1
+            f, op, initop, blocks, costs, arrays, get_num_threads(), 0, 1
         )
     end
     return nothing
@@ -259,42 +298,41 @@ end
 # nthreads: number of threads spacing: extra addition to offset of array 1, to account for
 # reduction
 function _mapreduce_threaded!(
-        f::F, op::OP, initop::I, dims, blocks, strides, offsets, costs, arrays, nthreads,
-        spacing, taskindex
+        f::F, op::OP, initop::I, blocks, costs, arrays, nthreads, spacing, taskindex
     ) where {F, OP, I}
+    dims = size(arrays[1])
     if nthreads == 1 || prod(dims) <= MINTHREADLENGTH
-        offset1 = offsets[1] + spacing * (taskindex - 1)
-        spacedoffsets = (offset1, Base.tail(offsets)...)
-        _mapreduce_kernel!(f, op, initop, dims, blocks, arrays, strides, spacedoffsets)
-    else
-        i = _lastargmax((dims .- 1) .* costs)
-        if iszero(costs[i]) || dims[i] <= min(blocks[i], 1024)
-            offset1 = offsets[1] + spacing * (taskindex - 1)
-            spacedoffsets = (offset1, Base.tail(offsets)...)
-            _mapreduce_kernel!(f, op, initop, dims, blocks, arrays, strides, spacedoffsets)
-        else
-            di = dims[i]
-            ndi = di >> 1
-            nnthreads = nthreads >> 1
-            newdims = setindex(dims, ndi, i)
-            newoffsets = offsets
-            t = Threads.@spawn _mapreduce_threaded!(
-                f, op, initop, newdims, blocks, strides,
-                newoffsets, costs, arrays, nnthreads,
-                spacing, taskindex
-            )
-            stridesi = getindex.(strides, i)
-            newoffsets2 = offsets .+ ndi .* stridesi
-            newdims2 = setindex(dims, di - ndi, i)
-            nnthreads2 = nthreads - nnthreads
-            _mapreduce_threaded!(
-                f, op, initop, newdims2, blocks, strides, newoffsets2,
-                costs, arrays, nnthreads2, spacing, taskindex + nnthreads
-            )
-            wait(t)
-        end
+        return _mapreduce_kernel!(f, op, initop, blocks, _shiftoutput(arrays, spacing, taskindex))
     end
+    i = _lastargmax((dims .- 1) .* costs)
+    if iszero(costs[i]) || dims[i] <= min(blocks[i], 1024)
+        return _mapreduce_kernel!(f, op, initop, blocks, _shiftoutput(arrays, spacing, taskindex))
+    end
+    di = dims[i]
+    ndi = di >> 1
+    nnthreads = nthreads >> 1
+    arrays1 = map(a -> _relayout(a, setindex(size(a), ndi, i), strides(a)), arrays)
+    t = Threads.@spawn _mapreduce_threaded!(
+        f, op, initop, blocks, costs, arrays1, nnthreads, spacing, taskindex
+    )
+    arrays2 = map(arrays) do a
+        return _relayout(
+            a, setindex(size(a), di - ndi, i), strides(a), offset(a) + ndi * stride(a, i)
+        )
+    end
+    _mapreduce_threaded!(
+        f, op, initop, blocks, costs, arrays2, nthreads - nnthreads, spacing,
+        taskindex + nnthreads
+    )
+    wait(t)
     return nothing
+end
+
+@inline function _shiftoutput(arrays, spacing, taskindex)
+    iszero(spacing) && return arrays
+    out = arrays[1]
+    shifted = _relayout(out, size(out), strides(out), offset(out) + spacing * (taskindex - 1))
+    return (shifted, Base.tail(arrays)...)
 end
 
 function _mapreduce_kernel_expr(f, op, initop, N::Int, M::Int; unit::Bool = false)
@@ -330,11 +368,12 @@ function _mapreduce_kernel_expr(f, op, initop, N::Int, M::Int; unit::Bool = fals
     pre1ex = Expr(:block)
     pre2ex = Expr(:block)
     pre3ex = Expr(:block)
+    push!(pre1ex.args, :(dims = size(arrays[1])))
     for j in 1:M
         push!(pre1ex.args, :($(Avars[j]) = arrays[$j]))
-        push!(pre3ex.args, :($(Ivars[j]) = offsets[$j] + 1))
+        push!(pre3ex.args, :($(Ivars[j]) = offset($(Avars[j])) + 1))
         for i in 1:N
-            push!(pre2ex.args, :($(stridevars[i, j]) = strides[$j][$i]))
+            push!(pre2ex.args, :($(stridevars[i, j]) = stride($(Avars[j]), $i)))
         end
     end
 
@@ -532,17 +571,14 @@ function _mapreduce_kernel_expr(f, op, initop, N::Int, M::Int; unit::Bool = fals
     return ex
 end
 
+# The loop bounds, strides and offsets are all taken from `arrays`, which have to share the
+# same size; `blocks` holds the block size for each dimension.
 @generated function _mapreduce_kernel!(
-        (f), (op),
-        (initop), dims::NTuple{N, Int},
-        blocks::NTuple{N, Int},
-        arrays::NTuple{M, StridedView},
-        strides::NTuple{M, NTuple{N, Int}},
-        offsets::NTuple{M, Int}
+        (f), (op), (initop), blocks::NTuple{N, Int}, arrays::NTuple{M, StridedView}
     ) where {N, M}
     op === Nothing || return _mapreduce_kernel_expr(f, op, initop, N, M)
     # select the unit-stride variant of the innermost loop once, instead of in every iteration
-    unitcond = Expr(:call, :all, :(==(1)), Expr(:tuple, (:(strides[$j][1]) for j in 1:M)...))
+    unitcond = Expr(:call, :all, :(==(1)), Expr(:tuple, (:(stride(arrays[$j], 1)) for j in 1:M)...))
     return quote
         if $unitcond
             $(_mapreduce_kernel_expr(f, op, initop, N, M; unit = true))

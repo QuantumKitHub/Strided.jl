@@ -52,7 +52,7 @@ Base.dotview(a::StridedView{<:Any, N}, I::Vararg{SliceIndex, N}) where {N} = get
     # promote StridedView to have same size, by giving artificial zero strides
     stridedargs = promoteshape(dims, capturestridedargs(bc)...)
     c = make_capture(bc)
-    _mapreduce_order!(c, nothing, nothing, dims, (dest, stridedargs...))
+    _mapreduce_order!(c, nothing, nothing, (dest, stridedargs...))
     return dest
 end
 
@@ -83,11 +83,8 @@ function promoteshape1(sz::Dims{N}, a::StridedView) where {N}
         end
     end
 
-    # bypass default constructor to avoid unnecessary stride normalization:
     # a is already normalized, singleton-axis strides do not affect iteration.
-    return StridedView{eltype(a), N, typeof(a.parent), typeof(a.op)}(
-        a.parent, sz, newstrides, a.offset, a.op
-    )
+    return _relayout(a, sz, newstrides)
 end
 
 struct CaptureArgs{F, Args <: Tuple}

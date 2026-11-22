@@ -105,46 +105,19 @@ function Strided._mapreduce(
     return Array(out)[1]
 end
 
-# 0-dimensional fast path: bypass @generated kernel
-# needs GPU specific extension to avoid scalar indexing error
-function Strided._mapreduce_scalar!(
-        @nospecialize(f), @nospecialize(op), @nospecialize(initop),
-        arrays::Tuple{GPUStridedView{TO, 0}, Vararg{GPUStridedView{<:Any, 0}}}
-    ) where {TO}
-    out = arrays[1]
-    iout = ParentIndex(Strided.offset(out) + 1)
-    @allowscalar begin
-        v = f(map(a -> a[ParentIndex(Strided.offset(a) + 1)], Base.tail(arrays))...)
-        if op === nothing
-            out[iout] = v
-        else
-            o = initop === nothing ? out[iout] : initop(out[iout])
-            out[iout] = op(o, v)
-        end
-    end
-    return nothing
-end
-
-# Singleton views with axes still execute on the device, without layout planning.
-function Strided._mapreduce_scalar!(
+# GPU views are ordered and fused like CPU views, so that neighbouring work items access
+# neighbouring entries, but are not blocked: every output element gets its own work item,
+# which loops over the reduction dimensions.
+function Strided._mapreduce_order!(
         f, op, initop,
         arrays::Tuple{GPUStridedView{TO, N}, Vararg{GPUStridedView{<:Any, N}}}
     ) where {TO, N}
-    return Strided._mapreduce_block!(
-        f, op, initop, size(arrays[1]), map(strides, arrays),
-        map(Strided.offset, arrays), nothing, arrays
-    )
-end
-
-function Strided._mapreduce_block!(
-        f, op, initop,
-        dims::Dims{N},
-        strides, offsets, costs,
-        arrays::Tuple{GPUStridedView{TO, N}, Vararg{GPUStridedView{<:Any, N}}}
-    ) where {TO, N}
+    N == 0 && return _mapreduce_scalar!(f, op, initop, arrays)
+    arrays = Strided.order_and_fuse_dims(arrays)
 
     out = arrays[1]
-    out_strides = strides[1]
+    dims = size(out)
+    out_strides = strides(out)
 
     # Number of output elements = product of non-reduction dims
     dims_out = ntuple(Val(N)) do d
@@ -157,7 +130,26 @@ function Strided._mapreduce_block!(
     backend = KernelAbstractions.get_backend(parent(out))
     kernel! = _mapreduce_gpu_kernel!(backend)
     ops = _get_op.(arrays)
-    kernel!(f, op, initop, dims_red, strides, offsets, ops, parent.(arrays); ndrange = dims_out)
+    kernel!(
+        f, op, initop, dims_red, map(strides, arrays), map(Strided.offset, arrays), ops,
+        parent.(arrays); ndrange = dims_out
+    )
+    return nothing
+end
+
+# 0-dimensional case: a kernel launch is not worth it, use scalar indexing instead
+function _mapreduce_scalar!(@nospecialize(f), @nospecialize(op), @nospecialize(initop), arrays)
+    out = arrays[1]
+    iout = ParentIndex(Strided.offset(out) + 1)
+    @allowscalar begin
+        v = f(map(a -> a[ParentIndex(Strided.offset(a) + 1)], Base.tail(arrays))...)
+        if op === nothing
+            out[iout] = v
+        else
+            o = initop === nothing ? out[iout] : initop(out[iout])
+            out[iout] = op(o, v)
+        end
+    end
     return nothing
 end
 
