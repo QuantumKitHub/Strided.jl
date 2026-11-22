@@ -121,21 +121,24 @@ end
 # Fuse dimensions if possible: merge dimension `i` into `i-1` when the two are
 # contiguous in *every* array (`s[i] == dims[i-1] * s[i-1]`).
 # Merged dimensions fold their extent into `i-1` and become size 1.
-@inline function _fusedims(dims, allstrides)
-    @inbounds for i in length(dims):-1:2
-        merge = true
+# Whether `i` merges into `i-1` only depends on the original sizes and strides, so all merge
+# flags are computed independently, followed by a fully unrolled scan that folds the extents.
+@inline function _fusedims(dims::NTuple{N, Int}, allstrides) where {N}
+    merges = ntuple(Val(N)) do i
+        i == 1 && return false
+        m = true
         for s in allstrides
-            if s[i] != dims[i - 1] * s[i - 1]
-                merge = false
-                break
-            end
+            m &= @inbounds(s[i] == dims[i - 1] * s[i - 1])
         end
-        if merge
-            dims = TupleTools.setindex(dims, dims[i - 1] * dims[i], i - 1)
-            dims = TupleTools.setindex(dims, 1, i)
-        end
+        return m
     end
-    return dims
+    return first(_fusescan(dims, merges))
+end
+_fusescan(::Tuple{}, ::Tuple{}) = ((), 1)
+@inline function _fusescan(dims::Tuple, merges::Tuple)
+    rest, carry = _fusescan(tail(dims), tail(merges))
+    d = dims[1] * carry
+    return (ifelse(merges[1], 1, d), rest...), ifelse(merges[1], d, 1)
 end
 
 # Construct a view with the given layout, bypassing the default constructor to avoid stride
