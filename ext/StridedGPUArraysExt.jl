@@ -182,4 +182,8 @@ function Strided.blas_mul!(
     return C
 end
 
+# ---------- GPU batched out-of-place permutation support ----------
+
+include("StridedGPUArraysExt_batched.jl")
+
 end

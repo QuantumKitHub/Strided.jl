@@ -56,6 +56,8 @@ include("mapreduce.jl")
 include("broadcast.jl")
 include("macros.jl")
 include("convert.jl")
+include("batched_permutedims.jl")
+include("batched_permutedims_cpu.jl")
 
 include("precompile.jl")
 
