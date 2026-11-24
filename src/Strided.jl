@@ -10,7 +10,7 @@ using TupleTools
 # using TupleTools: StaticLength
 
 using StridedViews
-using StridedViews: offset, ParentIndex
+using StridedViews: offset, ParentIndex, unsafe_stridedview
 
 # re-export?
 export StridedView, @strided, sreshape, sview, isstrided

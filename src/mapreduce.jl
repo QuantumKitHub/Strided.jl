@@ -5,14 +5,14 @@ Base.conj!(a::StridedView) = map!(conj, a, a)
 LinearAlgebra.adjoint!(dst::StridedView, src::StridedView) = copy!(dst, adjoint(src))
 LinearAlgebra.transpose!(C::StridedView, A::StridedView) = copy!(C, transpose(A))
 # Same as `copy!(dst, permutedims(src, p))`, but skips normalizing the strides of the
-# permuted view, which the kernels don't need.
+# permuted view, which the kernels don't need (see `_fusedims`).
 function Base.permutedims!(
         dst::StridedView{<:Any, N}, src::StridedView{<:Any, N}, p
     ) where {N}
     (length(p) == N && isperm(p)) || _throw_invalidperm(N, p)
     newsize = ntuple(i -> @inbounds(size(src)[p[i]]), Val(N))
     newstrides = ntuple(i -> @inbounds(strides(src)[p[i]]), Val(N))
-    return copy!(dst, _relayout(src, newsize, newstrides))
+    return copy!(dst, unsafe_stridedview(src, newsize, newstrides))
 end
 Base.fill!(A::StridedView, val) = map!(Returns(val), A, A)
 function Base.fill!(
@@ -127,21 +127,44 @@ function _mapreducedim!(
     return arrays[1]
 end
 
-# Fuse dimensions if possible: merge dimension `i` into `i-1` when the two are
-# contiguous in *every* array (`s[i] == dims[i-1] * s[i-1]`).
-# Merged dimensions fold their extent into `i-1` and become size 1.
-# Whether `i` merges into `i-1` only depends on the original sizes and strides, so all merge
-# flags are computed independently, followed by a fully unrolled scan that folds the extents.
-@inline function _fusedims(dims::NTuple{N, Int}, allstrides) where {N}
-    merges = ntuple(Val(N)) do i
-        i == 1 && return false
-        m = true
-        for s in allstrides
-            m &= @inbounds(s[i] == dims[i - 1] * s[i - 1])
-        end
-        return m
-    end
-    return first(_fusescan(dims, merges))
+# Fuse dimensions if possible: merge a dimension into the preceding one when the two are
+# contiguous in *every* array. Merged dimensions fold their extent into the preceding one and
+# become size 1. Returns the new sizes and strides.
+# The stride of a size 1 dimension does not affect the iteration, so size 1 dimensions are
+# skipped: they always merge into the preceding dimension, and their strides are never used.
+# A dimension `i` of size > 1 merges when `s[i] == dims[j] * s[j]` in every array, with `j` the
+# preceding dimension of size > 1. If there is none, i.e. all dimensions before `i` have size 1,
+# then `i` merges into the first dimension, which takes over its strides. Hence neither a
+# leading size 1 dimension, nor a size 1 dimension with an arbitrary stride (e.g. after
+# `permutedims!`, which skips stride normalization) prevents fusing.
+# The merge flags are computed by a fully unrolled scan that carries the size and strides of
+# the preceding dimension of size > 1, followed by a fully unrolled scan that folds the extents.
+_fusedims(dims::Tuple{}, allstrides::Tuple) = dims, allstrides
+@inline function _fusedims(dims::NTuple{N, Int}, allstrides::Tuple) where {N}
+    merges = (
+        false,
+        _mergeflags(tail(dims), map(tail, allstrides), dims[1] > 1, dims[1], map(first, allstrides))...,
+    )
+    fdims = first(_fusescan(dims, merges))
+    fstrides = map(s -> setindex(s, _leadingstride(dims, s, s[1]), 1), allstrides)
+    return fdims, fstrides
+end
+# `seen`: whether a dimension of size > 1 precedes; `d` and `ps`: size and strides of the last one
+_mergeflags(::Tuple{}, ::Tuple, seen::Bool, d::Int, ps::Tuple) = ()
+@inline function _mergeflags(dims::Tuple, allstrides::Tuple, seen::Bool, d::Int, ps::Tuple)
+    di = dims[1]
+    si = map(first, allstrides)
+    single = di == 1
+    m = single | !seen | _allcontiguous(si, d, ps)
+    rest = _mergeflags(
+        tail(dims), map(tail, allstrides), seen | !single, ifelse(single, d, di),
+        map((p, s) -> ifelse(single, p, s), ps, si)
+    )
+    return (m, rest...)
+end
+_allcontiguous(::Tuple{}, d::Int, ::Tuple{}) = true
+@inline function _allcontiguous(s::Tuple, d::Int, ps::Tuple)
+    return (s[1] == d * ps[1]) & _allcontiguous(tail(s), d, tail(ps))
 end
 _fusescan(::Tuple{}, ::Tuple{}) = ((), 1)
 @inline function _fusescan(dims::Tuple, merges::Tuple)
@@ -149,36 +172,10 @@ _fusescan(::Tuple{}, ::Tuple{}) = ((), 1)
     d = dims[1] * carry
     return (ifelse(merges[1], 1, d), rest...), ifelse(merges[1], d, 1)
 end
-
-# The stride of a size 1 dimension does not affect the iteration, so it can be chosen freely.
-# Choose it such that `_fusedims` merges the dimension into its neighbour: for leading size 1
-# dimensions, use the stride of the first non-singleton dimension, and for the others use the
-# extent of the preceding dimension.
-# The latter matches the normalization of the `StridedView` constructor, but views created
-# internally (e.g. in `permutedims!` and `promoteshape`) skip it. The former is needed even for
-# normalized views: a leading size 1 dimension would otherwise block fusing, and makes the
-# input fail the natural-order check of the small-input path.
-@inline function _normalizesingletons(dims::NTuple{N, Int}, strides::NTuple{N, Int}) where {N}
-    sk = strides[N]
-    for i in N:-1:1
-        sk = ifelse(dims[i] > 1, strides[i], sk)
-    end
-    return first(_singletonscan(dims, strides, sk))
-end
-_singletonscan(::Tuple{}, ::Tuple{}, carry) = ((), carry)
-@inline function _singletonscan(dims::Tuple, strides::Tuple, carry)
-    s = ifelse(dims[1] == 1, carry, strides[1])
-    rest, _ = _singletonscan(tail(dims), tail(strides), dims[1] * s)
-    return (s, rest...), carry
-end
-
-# Construct a view with the given layout, bypassing the default constructor to avoid stride
-# normalization: zero strides (broadcast or reduction dimensions) have to survive.
-@inline function _relayout(
-        a::StridedView{T, <:Any, A, F}, sz::NTuple{N, Int}, st::NTuple{N, Int},
-        o::Int = a.offset
-    ) where {T, N, A, F}
-    return StridedView{T, N, A, F}(a.parent, sz, st, o, a.op)
+# stride of the first dimension of size > 1, or `s1` if there is none
+_leadingstride(::Tuple{}, ::Tuple{}, s1::Int) = s1
+@inline function _leadingstride(dims::Tuple, strides::Tuple, s1::Int)
+    return ifelse(dims[1] > 1, strides[1], _leadingstride(tail(dims), tail(strides), s1))
 end
 
 # Fusing only changes sizes, so surviving dimensions retain their importance
@@ -189,14 +186,14 @@ function order_and_fuse_dims(dims::Dims, allstrides::Tuple)
     ordered_dims = TupleTools.getindices(dims, loop_order)
     ordered_strides = map(s -> TupleTools.getindices(s, loop_order), allstrides)
 
-    fused_dims = _fusedims(ordered_dims, ordered_strides)
+    fused_dims, fused_strides = _fusedims(ordered_dims, ordered_strides)
     active_order = TupleTools.sortperm(map(d -> Int(d > 1), fused_dims); rev = true)
     return TupleTools.getindices(fused_dims, active_order),
-        map(s -> TupleTools.getindices(s, active_order), ordered_strides)
+        map(s -> TupleTools.getindices(s, active_order), fused_strides)
 end
 function order_and_fuse_dims(arrays::Tuple{Vararg{StridedView}})
     dims, allstrides = order_and_fuse_dims(size(arrays[1]), map(strides, arrays))
-    return map((a, s) -> _relayout(a, dims, s), arrays, allstrides)
+    return map((a, s) -> unsafe_stridedview(a, dims, s), arrays, allstrides)
 end
 
 # Each stride rank gets enough bits to hold all array votes without carries.
@@ -246,10 +243,9 @@ end
     # A single element needs no layout planning, regardless of the number of axes.
     len == 1 && return _mapreduce_scalar!(f, op, initop, arrays)
     if len <= MAXNAIVELENGTH
-        allstrides = map(s -> _normalizesingletons(dims, s), map(strides, arrays))
-        fdims = _fusedims(dims, allstrides)
-        if _isnaturalorder(fdims, allstrides[1])
-            fused = map((a, s) -> _relayout(a, fdims, s), arrays, allstrides)
+        fdims, fstrides = _fusedims(dims, map(strides, arrays))
+        if _isnaturalorder(fdims, fstrides[1])
+            fused = map((a, s) -> unsafe_stridedview(a, fdims, s), arrays, fstrides)
             return _mapreduce_kernel!(f, op, initop, nothing, fused)
         end
     end
@@ -300,7 +296,7 @@ function _mapreduce_block!(f::F, op::OP, initop::I, arrays) where {F, OP, I}
         _init_reduction!(threadedout, f, op, a)
 
         # all strides of the output are zero, so the partial results only differ by offset
-        newarrays = (_relayout(threadedout, dims, allstrides[1]), Base.tail(arrays)...)
+        newarrays = (unsafe_stridedview(threadedout, dims, allstrides[1]), Base.tail(arrays)...)
         _mapreduce_threaded!(
             f, op, nothing, blocks, costs, newarrays, get_num_threads(), spacing, 1
         )
@@ -348,12 +344,12 @@ function _mapreduce_threaded!(
     di = dims[i]
     ndi = di >> 1
     nnthreads = nthreads >> 1
-    arrays1 = map(a -> _relayout(a, setindex(size(a), ndi, i), strides(a)), arrays)
+    arrays1 = map(a -> unsafe_stridedview(a, setindex(size(a), ndi, i), strides(a)), arrays)
     t = Threads.@spawn _mapreduce_threaded!(
         f, op, initop, blocks, costs, arrays1, nnthreads, spacing, taskindex
     )
     arrays2 = map(arrays) do a
-        return _relayout(
+        return unsafe_stridedview(
             a, setindex(size(a), di - ndi, i), strides(a), offset(a) + ndi * stride(a, i)
         )
     end
@@ -368,7 +364,7 @@ end
 @inline function _shiftoutput(arrays, spacing, taskindex)
     iszero(spacing) && return arrays
     out = arrays[1]
-    shifted = _relayout(out, size(out), strides(out), offset(out) + spacing * (taskindex - 1))
+    shifted = unsafe_stridedview(out, size(out), strides(out), offset(out) + spacing * (taskindex - 1))
     return (shifted, Base.tail(arrays)...)
 end
 

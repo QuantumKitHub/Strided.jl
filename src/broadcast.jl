@@ -84,7 +84,7 @@ function promoteshape1(sz::Dims{N}, a::StridedView) where {N}
     end
 
     # a is already normalized, singleton-axis strides do not affect iteration.
-    return _relayout(a, sz, newstrides)
+    return unsafe_stridedview(a, sz, newstrides)
 end
 
 struct CaptureArgs{F, Args <: Tuple}
