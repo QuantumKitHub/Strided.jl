@@ -66,12 +66,12 @@ function LinearAlgebra.mul!(
     end
     # C.op is identity or conj
     if C.op == conj
-        if stride(C, 1) < stride(C, 2)
+        if !_transposeoutput(C)
             _mul!(conj(C), conj(A), conj(B), conj(α), conj(β))
         else
             _mul!(C', B', A', conj(α), conj(β))
         end
-    elseif stride(C, 1) > stride(C, 2)
+    elseif _transposeoutput(C)
         _mul!(transpose(C), transpose(B), transpose(A), α, β)
     else
         _mul!(C, A, B, α, β)
@@ -79,32 +79,61 @@ function LinearAlgebra.mul!(
     return C
 end
 
+# Whether to compute the transpose of `C`: BLAS can only write to `C` directly if it has a BLAS
+# layout (see `_isblaslayout`), so prefer the orientation that has one, and otherwise the one
+# with the smaller stride along the rows.
+function _transposeoutput(C::StridedView{<:Any, 2})
+    (m, n), (s1, s2) = size(C), strides(C)
+    _isblaslayout(m, n, s1, s2) && return false
+    return _isblaslayout(n, m, s2, s1) || s1 > s2
+end
+
 # `C = β * C`, where `β == 0` overwrites `C`, which may contain `NaN`s, e.g. if it is uninitialized
 _scale!(C::StridedView, β::Number) = iszero(β) ? fill!(C, zero(eltype(C))) : rmul!(C, β)
 
+# Whether an `m × n` matrix with strides `(s1, s2)` can be passed to BLAS as a column-major
+# matrix: unit stride along the rows, and a leading dimension (stride along the columns) of at
+# least the number of rows, which also excludes negative strides and overlapping columns.
+# The stride of a dimension of size 1 does not matter, and neither do the strides of an empty
+# matrix: `_blaslayout` replaces them by values that satisfy these conditions.
+function _isblaslayout(m::Int, n::Int, s1::Int, s2::Int)
+    (m == 0 || n == 0) && return true
+    return (m == 1 || s1 == 1) && (n == 1 || s2 >= m)
+end
+function _blaslayout(A::StridedView{<:Any, 2})
+    (m, n), (s1, s2) = size(A), strides(A)
+    isempty = m == 0 || n == 0
+    s1′ = ifelse(isempty | (m == 1), 1, s1)
+    s2′ = ifelse(isempty | (n == 1), max(m, 1), s2)
+    return unsafe_stridedview(A, (m, n), (s1′, s2′))
+end
+
 function isblasmatrix(A::StridedView{T, 2}) where {T <: LinearAlgebra.BlasFloat}
+    (m, n), (s1, s2) = size(A), strides(A)
     if A.op == identity
-        return stride(A, 1) == 1 || stride(A, 2) == 1
+        return _isblaslayout(m, n, s1, s2) || _isblaslayout(n, m, s2, s1)
     elseif A.op == conj
-        return stride(A, 2) == 1
+        return _isblaslayout(n, m, s2, s1)
     else # should never happen
         return false
     end
 end
 getblasmatrix(A::StridedView{T, 2}) where {T <: LinearAlgebra.BlasFloat} = _blasview(A)
+# Returns a matrix with a BLAS layout (see `_isblaslayout`), together with the BLAS operation
+# that has to be applied to it to obtain `A`. `A` has to satisfy `isblasmatrix(A)`.
 function _blasview(A::StridedView{T, 2}) where {T <: LinearAlgebra.BlasFloat}
     if A.op == identity
-        if stride(A, 1) == 1
-            return A, 'N'
+        if _isblaslayout(size(A)..., strides(A)...)
+            return _blaslayout(A), 'N'
         else
-            return transpose(A), 'T'
+            return _blaslayout(transpose(A)), 'T'
         end
     else
-        return adjoint(A), 'C'
+        return _blaslayout(adjoint(A)), 'C'
     end
 end
 
-# here we will have C.op == :identity && stride(C,1) < stride(C,2)
+# here we will have C.op == identity, and C has a BLAS layout if possible (see `_transposeoutput`)
 function _mul!(
         C::StridedView{T, 2}, A::StridedView{T, 2}, B::StridedView{T, 2},
         α::Number, β::Number
@@ -126,7 +155,9 @@ function blas_mul!(
     nthreads = use_threaded_mul() ? get_num_threads() : 1
     A2, CA = getblasmatrix(A)
     B2, CB = getblasmatrix(B)
-    return _threaded_blas_mul!(C, A2, CA, B2, CB, convert(T, α), convert(T, β), nthreads)
+    C2, _ = getblasmatrix(C) # `_mul!` guarantees `C.op == identity` and a BLAS layout
+    _threaded_blas_mul!(C2, A2, CA, B2, CB, convert(T, α), convert(T, β), nthreads)
+    return C
 end
 
 _split_row(A, m) = (A[1:m, :], A[(m + 1):end, :])
