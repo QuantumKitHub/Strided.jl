@@ -10,7 +10,7 @@ using TupleTools
 # using TupleTools: StaticLength
 
 using StridedViews
-using StridedViews: offset, ParentIndex
+using StridedViews: offset, ParentIndex, unsafe_stridedview
 
 # re-export?
 export StridedView, @strided, sreshape, sview, isstrided
@@ -49,6 +49,19 @@ end
 
 function __init__()
     return set_num_threads(Base.Threads.nthreads())
+end
+
+# Error paths are kept out of line, so that they (and building their messages) don't bloat
+# the inlined hot paths.
+@noinline _throw_dimensionmismatch() = throw(DimensionMismatch())
+@noinline function _throw_broadcast_dimensionmismatch()
+    throw(DimensionMismatch("array could not be broadcasted to match destination"))
+end
+@noinline function _throw_mul_dimensionmismatch(szA::Dims, szB::Dims, szC::Dims)
+    throw(DimensionMismatch(lazy"A has size $szA, B has size $szB, C has size $szC"))
+end
+@noinline function _throw_invalidperm(N::Int, p)
+    throw(ArgumentError(lazy"Invalid permutation of length $N: $p"))
 end
 
 include("linalg.jl")

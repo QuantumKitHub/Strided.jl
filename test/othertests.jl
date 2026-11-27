@@ -485,3 +485,35 @@ end
         end
     end
 end
+
+@testset "fusing dimensions" begin
+    # the parent indices visited by a layout, in iteration order
+    visited(dims, strides) = vec([sum((Tuple(I) .- 1) .* strides; init = 0) for I in CartesianIndices(dims)])
+    fuse(dims, strides...) = Strided._fusedims(dims, strides)
+    @test fuse((1, 1, 3, 4), (5, 5, 1, 3)) == ((12, 1, 1, 1), ((1, 5, 1, 3),))
+    @test fuse((3, 1, 4), (1, 99, 3)) == ((12, 1, 1), ((1, 99, 3),))
+    @test fuse((1, 3, 4), (1, 2, 100)) == ((3, 1, 4), ((2, 2, 100),))
+    @test fuse((1, 3, 1, 4), (1, 1, 7, 3), (0, 0, 9, 0)) == ((12, 1, 1, 1), ((1, 1, 7, 3), (0, 0, 9, 0)))
+    @test fuse((1, 3, 1, 4), (1, 1, 7, 3), (0, 1, 9, 0)) == ((3, 1, 1, 4), ((1, 1, 7, 3), (1, 1, 9, 0)))
+    @test fuse((1, 1), (4, 5)) == ((1, 1), ((4, 5),))
+    @test fuse((), ()) == ((), ((),))
+    for N in 1:6, _ in 1:500
+        dims = ntuple(_ -> rand((1, 1, 2, 3)), N)
+        allstrides = ntuple(_ -> ntuple(_ -> rand((0, 1, 2, 3, 6, -2)), N), rand(1:3))
+        fdims, fstrides = @inferred Strided._fusedims(dims, allstrides)
+        @test prod(fdims) == prod(dims)
+        for (s, fs) in zip(allstrides, fstrides)
+            @test visited(fdims, fs) == visited(dims, s)
+        end
+    end
+    # through the pipeline, with size 1 dimensions in all positions
+    for dims in ((1, 3, 4, 1), (1, 1, 5, 2), (2, 1, 1, 3), (1, 70, 1, 70)), p in ((1, 2, 3, 4), (2, 1, 3, 4), (4, 3, 2, 1), (3, 1, 4, 2))
+        A = randn(dims)
+        B = StridedView(zeros(size(A)[collect(p)]...))
+        @test permutedims!(B, StridedView(A), p) == permutedims(A, p)
+        C = StridedView(zeros(size(A)[collect(p)]...))
+        @test copy!(C, permutedims(StridedView(A), p)) == permutedims(A, p)
+        R = StridedView(randn(dims...))
+        @test (StridedView(copy(A)) .+= R) ≈ A .+ R
+    end
+end
